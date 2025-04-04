@@ -1,0 +1,34 @@
+# --------- pytorch --------- #
+torch==2.6
+torchvision
+tabulate # torch.compile prerequisite
+scipy # torch.compile prerequisite
+numpy # torch.compile prerequisite
+lightning # pytorch lightning for training
+
+# --------- huggingface --------- #
+datasets
+transformers
+transformers[torch]
+git+https://github.com/austinleedavis/tokenizers.git#subdirectory=bindings/python
+
+# --------- hydra --------- #
+hydra-core
+hydra-colorlog
+hydra-optuna-sweeper
+omegaconf
+
+# --------- loggers --------- #
+wandb
+torch_tb_profiler
+
+# --------- others --------- #
+tqdm # Fast, Extensible Progress Meter
+chess # A chess library with move generation and validation, etc.
+
+# --------- visualization --------- #
+seaborn
+scikit_learn
+matplotlib
+ipython
+plotly-express
