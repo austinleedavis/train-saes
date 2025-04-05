@@ -70,9 +70,7 @@ def main():
     ntfy = Ntfy(topic=os.environ.get("NTFY_TOPIC", None))
     ntfy.send_notification(f"Tuner Finished. {initial_lr.suggestion()=} {batch_size=}")
 
-    dm.setup()
-    exit()
-    # trainer.fit(model=sae, datamodule=dm)
+    trainer.fit(model=sae, datamodule=dm)
 
 
 if __name__ == "__main__":
