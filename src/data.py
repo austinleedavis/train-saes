@@ -56,7 +56,7 @@ class SaeDataModule(LightningDataModule):
             self.hf_dataset = datasets.load_dataset(
                 "parquet",
                 data_files={
-                    k: os.path.join(self.data_root, k, "*.parquet.gz")
+                    k: os.path.join(self.data_root, k, "activations_*.parquet*")
                     for k in ["train", "val", "test"]
                 },
                 num_proc=self.num_proc,
