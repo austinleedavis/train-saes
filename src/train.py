@@ -1,3 +1,4 @@
+print("Script started")
 import os
 
 import dotenv
@@ -17,6 +18,7 @@ torch.set_float32_matmul_precision("medium")
 
 
 def main():
+    print("Reached main()")
     dotenv.load_dotenv()
 
     dm = SaeDataModule(
