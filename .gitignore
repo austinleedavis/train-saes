@@ -1,6 +1,8 @@
 lightning_logs/
 wandb/
 models/
+data/
+slurm/
 .env
 
 
