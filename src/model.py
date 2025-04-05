@@ -45,13 +45,26 @@ class ConstrainedAdam(torch.optim.Adam):
 
 
 class SparseAutoEncoder(L.LightningModule):
+    """A Sparse Autoencoder (SAE) module for learning sparse representations of transformer residual stream activations.
+
+    Encodes activations into a higher-dimensional sparse latent space using a learned feature dictionary,
+    then decodes them back to reconstruct the original activations. Typically trained with a sparsity-inducing loss.
+    """
+
     activation_dim: int
+    """(D) Size of the input activation vectors"""
     dict_size: int
+    """(F) Size of the SAE's feature dictionary, i.e. the expanded latent space"""
     encoder_DF: nn.Linear
+    """Linear encoder from d_model (D) to feature dictionary (F)"""
     decoder_FD: nn.Linear
+    """Linear decode from feature dictionary (F) to d_model (D)"""
     activation_fn: nn.Module
+    """Nonlinear activation applied after both encoding and decoding."""
     loss_fn: nn.Module
+    """oss function used during training (e.g. L1-weighted reconstruction loss)."""
     lr: float = 0.001
+    """Learning rate used for optimization."""
 
     def __init__(
         self,
@@ -73,24 +86,33 @@ class SparseAutoEncoder(L.LightningModule):
         self.loss_fn = loss_fn
         self.save_hyperparameters(ignore=["activation_fn", "loss_fn"])
 
-    def setup(self, stage):
-        pass
-
     def encode(self, model_activations_D: torch.Tensor) -> torch.Tensor:
+        """
+        Encodes the input activation vectors into a sparse latent representation.
+
+        :param model_activations_D: Input activations of shape [..., D].
+        :type model_activations_D: Tensor
+        :return: Encoded sparse representation of shape [..., F].
+        :rtype: Tensor"""
         return self.activation_fn(self.encoder_DF(model_activations_D))
 
     def decode(self, encoded_representation_F: torch.Tensor) -> torch.Tensor:
+        """
+        Decodes the latent representation back into the original activation space.
+
+        :param encoded_representation_F: Sparse representation of shape [..., F].
+        :type encoded_representation_F: Tensor
+        :return: Reconstructed activations of shape [..., D].
+        :rtype: Tensor"""
         return self.activation_fn(self.decoder_FD(encoded_representation_F))
 
     def forward(
         self, model_activations_D: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Docstring for forward
-
         :param model_activations_D: Activations tensor with shape [..., d_model]
-        :type model_activations_D:
-        :return: (Reconstructed activations, intermediate encoded representation)
+        :type model_activations_D: Tensor
+        :return: Tuple of (reconstructed activations [..., D], encoded representation [..., F]).
         :rtype: tuple[Tensor, Tensor]
         """
         encoded_representation_F = self.encode(model_activations_D)
@@ -101,10 +123,7 @@ class SparseAutoEncoder(L.LightningModule):
         optimizer = ConstrainedAdam(
             self.parameters(), self.decoder_FD.parameters(), lr=self.lr
         )
-        # scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        #     optimizer, max_lr=1e-3, total_steps=self.trainer.estimated_stepping_batches
-        # )
-        return {"optimizer": optimizer}  # , "lr_scheduler": scheduler}
+        return {"optimizer": optimizer}
 
     def step(self, model_activations_BD: torch.Tensor):
         reconstructed_model_activations_BD, encoded_representation_BF = self.forward(
