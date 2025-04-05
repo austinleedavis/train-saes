@@ -20,9 +20,10 @@ torch.set_float32_matmul_precision("medium")
 def main():
     print("Reached main()")
     dotenv.load_dotenv()
+    data_root = os.environ.get("DATA_ROOT", "data")
 
     dm = SaeDataModule(
-        data_root=os.environ.get("DATA_ROOT", "data"),
+        data_root=data_root,
         collator=SingleLayerHiddenStateCollator(layer=10),
         batch_size=2,
         num_workers=15,

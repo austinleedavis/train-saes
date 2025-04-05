@@ -1,4 +1,5 @@
 import os
+from glob import glob
 from typing import Callable
 
 import datasets
@@ -53,6 +54,10 @@ class SaeDataModule(LightningDataModule):
 
     def setup(self, stage: str = None):
         if not self.hf_dataset:
+            for k in ["train", "test", "val"]:
+                files = glob(os.path.join(self.data_root, k, "activations_*.parquet*"))
+                print({k: f"count:{len(files)} first:{files[0]}"})
+
             self.hf_dataset = datasets.load_dataset(
                 "parquet",
                 data_files={
