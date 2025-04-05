@@ -49,32 +49,24 @@ class SaeDataModule(LightningDataModule):
                     k: os.path.join(self.data_root, k, "*.parquet.gz")
                     for k in ["train", "val", "test"]
                 },
-                streaming=True,
+                num_proc=self.num_workers,
+                # streaming=True,
             ).with_format("torch")
 
-    def train_dataloader(self):
+    def get_loader(self, stage: str):
         loader = DataLoader(
-            self.hf_dataset["train"],
+            self.hf_dataset[stage],
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             collate_fn=self.collator,
         )
         return loader
+
+    def train_dataloader(self):
+        return self.get_loader("train")
 
     def val_dataloader(self):
-        loader = DataLoader(
-            self.hf_dataset["val"],
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            collate_fn=self.collator,
-        )
-        return loader
+        return self.get_loader("val")
 
     def test_dataloader(self):
-        loader = DataLoader(
-            self.hf_dataset["test"],
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            collate_fn=self.collator,
-        )
-        return loader
+        return self.get_loader("test")
