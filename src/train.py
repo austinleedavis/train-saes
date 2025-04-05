@@ -11,6 +11,7 @@ from src.data import SaeDataModule, SingleLayerHiddenStateCollator
 from src.losses import MSELoss
 from src.model import SparseAutoEncoder
 from src.sparsity import BatchTopKFilter, TopKFilter
+from src.utils.ntfy import Ntfy
 
 torch.set_float32_matmul_precision("medium")
 
@@ -21,8 +22,9 @@ def main():
     dm = SaeDataModule(
         data_root=os.environ.get("DATA_ROOT", "data"),
         collator=SingleLayerHiddenStateCollator(layer=10),
-        batch_size=1,
+        batch_size=2,
         num_workers=15,
+        num_proc=64,
     )
 
     sae = SparseAutoEncoder(
@@ -58,6 +60,13 @@ def main():
             checkpoint_name=None,
         ),
     )
+
+    tuner = Tuner(trainer)
+    initial_lr = tuner.lr_find(model=sae, datamodule=dm)
+    batch_size = tuner.scale_batch_size(model=sae, datamodule=dm, max_trials=10)
+
+    ntfy = Ntfy(topic=os.environ.get("NTFY_TOPIC", None))
+    ntfy.send_notification(f"Tuner Finished. {initial_lr.suggestion()=} {batch_size=}")
 
     trainer.fit(model=sae, datamodule=dm)
 

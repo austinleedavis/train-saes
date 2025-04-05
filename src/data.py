@@ -23,20 +23,30 @@ class SingleLayerHiddenStateCollator:
 
 class SaeDataModule(LightningDataModule):
 
+    data_root: str
+    collator: Callable
+    batch_size: int
+    num_workers: int
+    num_proc: int
     hf_dataset: IterableDataset = None
-    data_root: str = ""
     train_split: Dataset = None
     val_split: Dataset = None
     test_split: Dataset = None
 
     def __init__(
-        self, data_root: str, collator: Callable, batch_size: int, num_workers: int
+        self,
+        data_root: str,
+        collator: Callable,
+        batch_size: int,
+        num_workers: int,
+        num_proc: int,
     ):
         super().__init__()
         self.data_root = data_root
         self.collator = collator
         self.batch_size = batch_size
         self.num_workers = num_workers
+        self.num_proc = num_proc
 
     def prepare_data(self) -> Dataset:
         pass
@@ -49,7 +59,7 @@ class SaeDataModule(LightningDataModule):
                     k: os.path.join(self.data_root, k, "*.parquet.gz")
                     for k in ["train", "val", "test"]
                 },
-                num_proc=self.num_workers,
+                num_proc=self.num_proc,
                 # streaming=True,
             ).with_format("torch")
 
