@@ -88,7 +88,7 @@ class SaeDataModule(LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             collate_fn=self.collator,
-            shuffle=True,
+            shuffle=False,
         )
         return loader
 
