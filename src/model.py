@@ -120,6 +120,7 @@ class SparseCrosscoder(L.LightningModule):
         :type model_activations_LD: Tensor
         :return: Encoded sparse representation of shape [B, P, F].
         :rtype: Tensor"""
+
         outputs = [
             linear(model_activations_BLPD[:, layer_idx])
             for layer_idx, linear in enumerate(self.encoder_LDF)
@@ -181,17 +182,17 @@ class SparseCrosscoder(L.LightningModule):
 
         return loss
 
-    def training_step(self, model_activations_BLPD: torch.Tensor):
-        loss = self.step(model_activations_BLPD)
+    def training_step(self, model_activations_BLPD: torch.Tensor, attention_mask_BLPD: torch.Tensor):
+        loss = self.step(model_activations_BLPD, attention_mask_BLPD)
         self.log("train/loss", loss)
         return {"loss": loss}
 
-    def validation_step(self, model_activations_BLPD: torch.Tensor):
-        loss = self.step(model_activations_BLPD)
+    def validation_step(self, model_activations_BLPD: torch.Tensor, attention_mask_BLPD: torch.Tensor):
+        loss = self.step(model_activations_BLPD, attention_mask_BLPD)
         self.log("validation/loss", loss)
         return {"loss": loss}
 
-    def test_step(self, model_activations_BLPD: torch.Tensor):
-        loss = self.step(model_activations_BLPD)
+    def test_step(self, model_activations_BLPD: torch.Tensor, attention_mask_BLPD: torch.Tensor):
+        loss = self.step(model_activations_BLPD, attention_mask_BLPD)
         self.log("test/loss", loss)
         return {"loss": loss}
