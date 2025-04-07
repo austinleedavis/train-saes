@@ -91,10 +91,12 @@ class CrossCoderL1Loss(nn.Module):
         self,
         model_activations_BLPD: torch.Tensor,
         reconstructed_model_activations_BLPD: torch.Tensor,
-        encoded_representations_BF: torch.Tensor,
+        encoded_representations_BPF: torch.Tensor,
         attention_mask: torch.Tensor,
         decoder_LFD: nn.ModuleList,  # assume type: nn.ModuleList[nn.Linear]
     ) -> torch.Tensor:
+
+        print("COMPUTING LOSSSSS")
         # MSE reconstruction loss
         recon_loss = F.mse_loss(
             reconstructed_model_activations_BLPD,
@@ -108,7 +110,7 @@ class CrossCoderL1Loss(nn.Module):
         decoder_weights_LFD = torch.stack(decoder_weights)
         decoder_norms_LF = decoder_weights_LFD.norm(dim=1)  # L2 of weights
         decoder_l1_of_norms_F = decoder_norms_LF.sum(dim=0)  # L1 of L2 norms
-        reg_loss = encoded_representations_BF @ decoder_l1_of_norms_F  # scale encoding by L1 norms
+        reg_loss = encoded_representations_BPF @ decoder_l1_of_norms_F  # scale encoding by L1 norms
 
         # Total loss: sum over batch
         total_loss = recon_loss + reg_loss.sum()
