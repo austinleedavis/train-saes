@@ -82,7 +82,7 @@ class SaeDataModule(LightningDataModule):
                 # streaming=True,
             ).with_format("torch")
 
-    def get_loader(self, stage: str):
+    def get_loader(self, stage: str, shuffle: bool):
         loader = DataLoader(
             self.hf_dataset[stage],
             batch_size=self.batch_size,
@@ -93,10 +93,10 @@ class SaeDataModule(LightningDataModule):
         return loader
 
     def train_dataloader(self):
-        return self.get_loader("train")
+        return self.get_loader("train", True)
 
     def val_dataloader(self):
-        return self.get_loader("val")
+        return self.get_loader("val", False)
 
     def test_dataloader(self):
-        return self.get_loader("test")
+        return self.get_loader("test", False)
