@@ -4,6 +4,7 @@ from typing import Callable
 
 import datasets
 import torch
+import torch.nn.functional as F
 from datasets import Dataset, IterableDataset
 from lightning.pytorch import LightningDataModule
 from torch.utils.data import DataLoader
@@ -17,12 +18,23 @@ class SingleLayerHiddenStateCollator:
 
     def __call__(self, batch_BLPD: list[dict[str, torch.Tensor]]):
         """
-        batch_BLPD comes in as a list of dict-records
-        HiddenState dimension is [Batch, Layer, Position, Dimension]"""
-        print(f"{type(batch_BLPD)=}")
-        print(f"{len(batch_BLPD)=}")
-        print(f"{(batch_BLPD[0]['HiddenStates'].shape)=}")
-        return torch.stack(batch_BLPD[0]["HiddenStates"])  # TODO, remove the [0] index
+        batch_BLPD comes in as a list of dict-records with shape Batch
+        So BLPD is [Batch, dict[Tensor[Layer, Position, Dimension]]]
+        HiddenState dimension is [Layer, Position, Dimension]"""
+        hidden_states = [x["HiddenStates"] for x in batch_BLPD]
+        max_len = max(t.shape[1] for t in hidden_states)
+        padded = [
+            F.pad(t, (0, 0, 0, max_len - t.shape[1]))  # pad dim=1 (seq dim) with zeros
+            for t in hidden_states
+        ]
+        stacked = torch.stack(padded, dim=0)  # shape: (batch, L, P, D)
+        print(f"{stacked.shape=}")
+        exit()
+        return stacked
+        # print(f"{type(batch_BLPD)=}")
+        # print(f"{len(batch_BLPD)=}")
+        # print(f"{(batch_BLPD[0]['HiddenStates'].shape)=}")
+        # return torch.stack(batch_BLPD[0]["HiddenStates"])  # TODO, remove the [0] index
 
 
 class SaeDataModule(LightningDataModule):
