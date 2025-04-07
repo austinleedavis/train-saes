@@ -157,7 +157,9 @@ class SparseCrosscoder(L.LightningModule):
         :type attention_mask_BLPD: torch.Tensor
 
         """
-
+        print(f"{model_activations_BLPD=}")
+        print(f"{attention_mask_BLPD=}")
+        exit()
         encoded_representation_BPF = self.encode(model_activations_BLPD)
         reconstructed_model_activations_BLPD = self.decode(encoded_representation_BPF)
 
