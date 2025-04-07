@@ -101,6 +101,7 @@ class SparseCrosscoder(L.LightningModule):
             [nn.Linear(dict_size, activation_dim, bias=True) for _ in range(n_layers)]
         )
         self.activation_fn = activation_fn
+        self.loss_fn = CrossCoderL1Loss()
 
         self.save_hyperparameters(ignore=["loss_fn"])
         # self.save_hyperparameters()
