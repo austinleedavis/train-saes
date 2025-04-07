@@ -3,11 +3,15 @@ Implementation of SAE inspired by https://adamkarvonen.github.io/machine_learnin
 
 """
 
+import math
+
 import lightning as L
 import torch
 import torch.nn as nn
+from torch.nn import functional as F
+from torch.nn import init
 
-from src.losses import L1WeightedLoss, SaeLoss
+from src.losses import CrossCoderL1Loss, MSELoss, SaeLoss
 
 
 class ConstrainedAdam(torch.optim.Adam):
@@ -44,21 +48,24 @@ class ConstrainedAdam(torch.optim.Adam):
                 p /= p.norm(dim=0, keepdim=True)
 
 
-class SparseAutoEncoder(L.LightningModule):
-    """A Sparse Autoencoder (SAE) module for learning sparse representations of transformer residual stream activations.
+class SparseCrosscoder(L.LightningModule):
+    """A Sparse Crosscoder (SCC) module for learning sparse representations of transformer residual stream activations.
 
     Encodes activations into a higher-dimensional sparse latent space using a learned feature dictionary,
-    then decodes them back to reconstruct the original activations. Typically trained with a sparsity-inducing loss.
+    then decodes them back to reconstruct the original activations. The linear layers in the encoder share a single bias
+    term, whereas the linear layers of the decoder each have their own bias terms.
     """
 
     activation_dim: int
     """(D) Size of the input activation vectors"""
     dict_size: int
     """(F) Size of the SAE's feature dictionary, i.e. the expanded latent space"""
-    encoder_DF: nn.Linear
-    """Linear encoder from d_model (D) to feature dictionary (F)"""
-    decoder_FD: nn.Linear
-    """Linear decode from feature dictionary (F) to d_model (D)"""
+    encoder_LDF: nn.ModuleList  # type: nn.ModuleList[nn.Linear]
+    """List of linear encoders which map from d_model (D) to feature dictionary (F) for each layer (L)"""
+    encoder_bias: nn.Parameter
+    """The single, shared bias term common to all layers of the encoder"""
+    decoder_LFD: nn.ModuleList  # type: nn.ModuleList[nn.Linear]
+    """List of linear decoders which map from feature dictionary (F) to d_model (D) for each layer (L). Each layer has its own bias."""
     activation_fn: nn.Module
     """Nonlinear activation applied after both encoding and decoding."""
     loss_fn: nn.Module
@@ -70,8 +77,8 @@ class SparseAutoEncoder(L.LightningModule):
         self,
         activation_dim: int,
         dict_size: int,
+        n_layers: int,
         activation_fn: nn.Module = nn.ReLU(),
-        loss_fn: SaeLoss = L1WeightedLoss(4),
         automatic_optimization: bool = True,
     ):
         super().__init__()
@@ -80,21 +87,46 @@ class SparseAutoEncoder(L.LightningModule):
         self.dict_size = dict_size
         self.automatic_optimization = automatic_optimization
 
-        self.encoder_DF = nn.Linear(activation_dim, dict_size, bias=True)
-        self.decoder_FD = nn.Linear(dict_size, activation_dim, bias=True)
-        self.activation_fn = activation_fn
-        self.loss_fn = loss_fn
-        self.save_hyperparameters(ignore=["activation_fn", "loss_fn"])
+        # initialize encoder
+        self.encoder_LDF = nn.ModuleList(
+            [nn.Linear(activation_dim, dict_size, bias=False) for _ in range(n_layers)]
+        )
+        # initialize bias
+        self.encoder_bias = nn.Parameter(torch.empty(dict_size))
+        bound = 1 / math.sqrt(self.activation_dim) if self.activation_dim > 0 else 0
+        init.uniform_(self.encoder_bias, -bound, bound)
 
-    def encode(self, model_activations_D: torch.Tensor) -> torch.Tensor:
+        # initialize decoder weights
+        self.decoder_LFD = nn.ModuleList(
+            [nn.Linear(dict_size, activation_dim, bias=True) for _ in range(n_layers)]
+        )
+        self.activation_fn = activation_fn
+
+        self.save_hyperparameters(ignore=["loss_fn"])
+        # self.save_hyperparameters()
+
+    def train(self, mode=True):
+        if mode:
+            self.loss_fn = CrossCoderL1Loss()
+        else:
+            self.loss_fn = MSELoss()
+        return super().train(mode)
+
+    def encode(self, model_activations_LD: torch.Tensor) -> torch.Tensor:
         """
         Encodes the input activation vectors into a sparse latent representation.
 
-        :param model_activations_D: Input activations of shape [..., D].
-        :type model_activations_D: Tensor
+        :param model_activations_LD: Input activations of shape [L,..., D].
+        :type model_activations_LD: Tensor
         :return: Encoded sparse representation of shape [..., F].
         :rtype: Tensor"""
-        return self.activation_fn(self.encoder_DF(model_activations_D))
+        outputs = [
+            linear(model_activations_LD[layer_idx]) for layer_idx, linear in enumerate(self.encoder_LDF)
+        ]
+
+        summed = torch.stack(outputs).sum(dim=0)
+
+        return self.activation_fn(summed + self.encoder_bias)
 
     def decode(self, encoded_representation_F: torch.Tensor) -> torch.Tensor:
         """
@@ -102,37 +134,37 @@ class SparseAutoEncoder(L.LightningModule):
 
         :param encoded_representation_F: Sparse representation of shape [..., F].
         :type encoded_representation_F: Tensor
-        :return: Reconstructed activations of shape [..., D].
+        :return: Reconstructed activations of shape [L,..., D].
         :rtype: Tensor"""
-        return self.activation_fn(self.decoder_FD(encoded_representation_F))
 
-    def forward(
-        self, model_activations_D: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        outputs = [
+            linear(encoded_representation_F[layer_idx]) for layer_idx, linear in enumerate(self.decoder_LFD)
+        ]
+
+        return torch.stack(outputs)
+
+    def forward(self, model_activations_LD: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        :param model_activations_D: Activations tensor with shape [..., d_model]
-        :type model_activations_D: Tensor
+        :param model_activations_LD: Activations tensor with shape [L, ..., d_model]
+        :type model_activations_LD: Tensor
         :return: Tuple of (reconstructed activations [..., D], encoded representation [..., F]).
         :rtype: tuple[Tensor, Tensor]
         """
-        encoded_representation_F = self.encode(model_activations_D)
-        reconstructed_model_activations_D = self.decode(encoded_representation_F)
-        return reconstructed_model_activations_D, encoded_representation_F
+        encoded_representation_F = self.encode(model_activations_LD)
+        reconstructed_model_activations_LD = self.decode(encoded_representation_F)
+        return reconstructed_model_activations_LD, encoded_representation_F
 
     def configure_optimizers(self):
-        optimizer = ConstrainedAdam(
-            self.parameters(), self.decoder_FD.parameters(), lr=self.lr
-        )
+        optimizer = ConstrainedAdam(self.parameters(), self.decoder_LFD.parameters(), lr=self.lr)
         return {"optimizer": optimizer}
 
     def step(self, model_activations_BD: torch.Tensor):
-        reconstructed_model_activations_BD, encoded_representation_BF = self.forward(
-            model_activations_BD
-        )
+        reconstructed_model_activations_BD, encoded_representation_BF = self.forward(model_activations_BD)
         loss = self.loss_fn(
             model_activations_BD,
             reconstructed_model_activations_BD,
             encoded_representation_BF,
+            self.decoder_LFD,
         )
         return loss
 

@@ -9,9 +9,7 @@ from lightning.pytorch.tuner import Tuner
 
 from src.callbacks import NtfyCallback, WandbLogger
 from src.data import SaeDataModule, SingleLayerHiddenStateCollator
-from src.losses import MSELoss
-from src.model import SparseAutoEncoder
-from src.sparsity import BatchTopKFilter, TopKFilter
+from src.model import SparseCrosscoder
 from src.utils.ntfy import Ntfy
 
 torch.set_float32_matmul_precision("medium")
@@ -22,7 +20,7 @@ def main():
     dotenv.load_dotenv()
     data_root = os.environ.get("DATA_ROOT", "data")
 
-    dm = SaeDataModule(
+    data = SaeDataModule(
         data_root=data_root,
         collator=SingleLayerHiddenStateCollator(layer=10),
         batch_size=2,
@@ -30,11 +28,10 @@ def main():
         num_proc=64,
     )
 
-    sae = SparseAutoEncoder(
+    model = SparseCrosscoder(
         activation_dim=768,
         dict_size=768 * 4,
-        loss_fn=MSELoss(),
-        activation_fn=TopKFilter(k=16),
+        n_layers=12,
     )
 
     trainer = Trainer(
@@ -65,13 +62,13 @@ def main():
     )
 
     tuner = Tuner(trainer)
-    initial_lr = tuner.lr_find(model=sae, datamodule=dm)
-    batch_size = tuner.scale_batch_size(model=sae, datamodule=dm, max_trials=10)
+    initial_lr = tuner.lr_find(model=model, datamodule=data)
+    batch_size = tuner.scale_batch_size(model=model, datamodule=data, max_trials=10)
 
     ntfy = Ntfy(topic=os.environ.get("NTFY_TOPIC", None))
     ntfy.send_notification(f"Tuner Finished. {initial_lr.suggestion()=} {batch_size=}")
 
-    trainer.fit(model=sae, datamodule=dm)
+    trainer.fit(model=model, datamodule=data)
 
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@ class L1WeightedLoss(SaeLoss):
         model_activations_BD: torch.Tensor,
         reconstructed_model_activations_BD: torch.Tensor,
         encoded_representations_BF: torch.Tensor,
+        decoder_LFD: nn.ModuleList,  # assume type: nn.ModuleList[nn.Linear]
     ):
         l2_loss = F.mse_loss(
             reconstructed_model_activations_BD,
@@ -46,8 +47,71 @@ class MSELoss(SaeLoss):
         model_activations_BD: torch.Tensor,
         reconstructed_model_activations_BD: torch.Tensor,
         encoded_representations_BF: torch.Tensor,
+        decoder_LFD: nn.ModuleList,  # assume type: nn.ModuleList[nn.Linear]
     ):
         return F.mse_loss(
             reconstructed_model_activations_BD,
             model_activations_BD,
         )
+
+
+class CrossCoderL1Loss(nn.Module):
+    r"""
+    L1-of-norms version of the crosscoder loss from:
+    https://transformer-circuits.pub/2024/crosscoders/index.html
+
+    The loss uses the L2 loss of the true and reconstructed activations, with
+    a L1 regularization term that sums the weights of the intermediate dictionary
+    feature vectors scaled by the L1 norm of the weights in the decoder.
+
+    Loss is computed as:
+
+        L = ∑ₗ ‖aˡ(xⱼ) - âˡ(xⱼ)‖² + ∑ᵢ fᵢ(xⱼ) * (∑ₗ ‖Wˡ_{dec, i}‖)
+
+    where:
+        - aˡ(xⱼ): true activations for layer l
+        - âˡ(xⱼ): reconstructed activations via decoder
+        - fᵢ(xⱼ): feature i activations
+        - Wˡ_{dec, i}: decoder vector for feature i at layer l
+    """
+
+    def __init__(
+        self,
+        #     decoder_LFD: nn.ModuleList,  # assume type: nn.ModuleList[nn.Linear]
+    ):
+        #     """
+        #     :param decoder_LFD: Dictionary mapping layer index l to decoder module W^l_{dec}
+        #     :type decoder_LFD: nn.ModuleList[nn.Linear]
+        #     """
+        super().__init__()
+
+    #     self.decoder_weights = [linear.weight for linear in decoder_LFD]
+
+    def forward(
+        self,
+        model_activations_LBD: torch.Tensor,
+        reconstructed_model_activations_LBD: torch.Tensor,
+        encoded_representations_BF: torch.Tensor,
+        decoder_LFD: nn.ModuleList,  # assume type: nn.ModuleList[nn.Linear]
+    ) -> torch.Tensor:
+        """
+        :param feature_activations: Feature activations f(x_j), shape (batch, F)
+        :type feature_activations: Tensor
+        :param layer_targets: Dict mapping layer index l to true activations a^l(x_j), each of shape (batch, D_l)
+        :type layer_targets: dict[int, Tensor]
+        :return: Scalar loss value
+        :rtype: Tensor
+        """
+        # MSE reconstruction loss
+        recon_loss = F.mse_loss(reconstructed_model_activations_LBD, model_activations_LBD, reduction="sum")
+
+        # Compute regularization term:
+        decoder_weights = [linear.weight for linear in decoder_LFD]
+        decoder_weights_LFD = torch.stack(self.decoder_weights)
+        decoder_norms_LF = decoder_weights_LFD.norm(dim=-1)  # L2 of weights
+        decoder_l1_of_norms_F = decoder_norms_LF.sum(dim=0)  # L1 of L2 norms
+        reg_loss = encoded_representations_BF @ decoder_l1_of_norms_F  # scale encoding by L1 norms
+
+        # Total loss: sum over batch
+        total_loss = recon_loss + reg_loss.sum()
+        return total_loss
