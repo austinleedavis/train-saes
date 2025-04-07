@@ -23,7 +23,7 @@ def main():
     data = SaeDataModule(
         data_root=data_root,
         collator=HiddenStateCollator(),
-        batch_size=2,
+        batch_size=256,
         num_workers=15,
         num_proc=64,
     )
@@ -63,10 +63,10 @@ def main():
 
     tuner = Tuner(trainer)
     initial_lr = tuner.lr_find(model=model, datamodule=data)
-    batch_size = tuner.scale_batch_size(model=model, datamodule=data, max_trials=10)
+    # batch_size = tuner.scale_batch_size(model=model, datamodule=data, max_trials=10)
 
     ntfy = Ntfy(topic=os.environ.get("NTFY_TOPIC", None))
-    ntfy.send_notification(f"Tuner Finished. {initial_lr.suggestion()=} {batch_size=}")
+    # ntfy.send_notification(f"Tuner Finished. {initial_lr.suggestion()=} {batch_size=}")
 
     trainer.fit(model=model, datamodule=data)
 
