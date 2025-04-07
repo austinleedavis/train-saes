@@ -44,15 +44,19 @@ class MSELoss(SaeLoss):
 
     def forward(
         self,
-        model_activations_BD: torch.Tensor,
-        reconstructed_model_activations_BD: torch.Tensor,
+        model_activations_BLPD: torch.Tensor,
+        reconstructed_model_activations_BLPD: torch.Tensor,
         encoded_representations_BF: torch.Tensor,
+        attention_mask: torch.Tensor,
         decoder_LFD: nn.ModuleList,  # assume type: nn.ModuleList[nn.Linear]
     ):
-        return F.mse_loss(
-            reconstructed_model_activations_BD,
-            model_activations_BD,
+        recon_loss = F.mse_loss(
+            reconstructed_model_activations_BLPD,
+            model_activations_BLPD,
+            reduction="sum",
+            weight=attention_mask,
         )
+        return recon_loss
 
 
 class CrossCoderL1Loss(nn.Module):
@@ -96,7 +100,6 @@ class CrossCoderL1Loss(nn.Module):
         decoder_LFD: nn.ModuleList,  # assume type: nn.ModuleList[nn.Linear]
     ) -> torch.Tensor:
 
-        print("COMPUTING LOSSSSS")
         # MSE reconstruction loss
         recon_loss = F.mse_loss(
             reconstructed_model_activations_BLPD,
