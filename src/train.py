@@ -42,7 +42,7 @@ def main():
         max_epochs=10,
         val_check_interval=1.0,  # When using an IterableDataset you must set the val_check_interval to 1.0
         callbacks=[
-            NtfyCallback(os.environ.get("NTFY_TOPIC", None)),
+            # NtfyCallback(os.environ.get("NTFY_TOPIC", None)),
             ModelCheckpoint(
                 dirpath="models",
                 monitor="val_loss",  # metric to monitor
@@ -53,12 +53,12 @@ def main():
                 filename="epoch-{epoch}-step-{step}-{val_loss:.4f}",  # custom filename
             ),
         ],
-        logger=WandbLogger(
-            name="test",
-            project="TrainSae",
-            log_model=False,
-            checkpoint_name=None,
-        ),
+        # logger=WandbLogger(
+        #     name="test",
+        #     project="TrainSae",
+        #     log_model=False,
+        #     checkpoint_name=None,
+        # ),
     )
 
     tuner = Tuner(trainer)
