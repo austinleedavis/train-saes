@@ -53,7 +53,7 @@ class MSELoss(SaeLoss):
         recon_loss = F.mse_loss(
             reconstructed_model_activations_BLPD,
             model_activations_BLPD,
-            reduction="sum",
+            reduction="mean",
             weight=attention_mask,
         )
         return recon_loss
@@ -104,7 +104,7 @@ class CrossCoderL1Loss(nn.Module):
         recon_loss = F.mse_loss(
             reconstructed_model_activations_BLPD,
             model_activations_BLPD,
-            reduction="sum",
+            reduction="mean",
             weight=attention_mask,
         )
 
