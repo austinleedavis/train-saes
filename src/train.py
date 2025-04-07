@@ -37,6 +37,7 @@ def main():
     trainer = Trainer(
         accelerator="auto",
         fast_dev_run=False,
+        reload_dataloaders_every_n_epochs=1,
         limit_test_batches=0,
         # limit_val_batches=0,
         max_epochs=10,

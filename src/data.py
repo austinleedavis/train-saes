@@ -18,13 +18,22 @@ class HiddenStateCollator:
         BLPD is [Batch, dict[Tensor[Layer, Position, Dimension]]]
         HiddenState dimension is [Layer, Position, Dimension]"""
         hidden_states = [x["HiddenStates"] for x in batch_BLPD]
-        max_len = max(t.shape[1] for t in hidden_states)
+        max_len = max(t.shape[-2] for t in hidden_states)
         padded = [
-            F.pad(t, (0, 0, 0, max_len - t.shape[1]))  # pad dim=1 (num_pos dim) with zeros
+            F.pad(
+                t, (0, 0, 0, max_len - t.shape[-2]), mode="constant", value=0
+            )  # pad dim=1 (num_pos dim) with zeros
             for t in hidden_states
         ]
         stacked = torch.stack(padded, dim=0)  # shape: (batch, L, P, D)
-        return stacked
+
+        attention_BP = torch.tensor(
+            [[1] * t.shape[-2] + [0] * (max_len - t.shape[-2]) for t in hidden_states],
+            dtype=torch.long,
+        )
+        attention_BLPD = attention_BP[:, None, :, None].expand(-1, 12, -1, 768)
+
+        return stacked, attention_BLPD
 
 
 class SaeDataModule(LightningDataModule):
@@ -79,6 +88,7 @@ class SaeDataModule(LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             collate_fn=self.collator,
+            shuffle=True,
         )
         return loader
 

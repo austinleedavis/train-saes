@@ -89,21 +89,19 @@ class CrossCoderL1Loss(nn.Module):
 
     def forward(
         self,
-        model_activations_LBD: torch.Tensor,
-        reconstructed_model_activations_LBD: torch.Tensor,
+        model_activations_BLPD: torch.Tensor,
+        reconstructed_model_activations_BLPD: torch.Tensor,
         encoded_representations_BF: torch.Tensor,
+        attention_mask: torch.Tensor,
         decoder_LFD: nn.ModuleList,  # assume type: nn.ModuleList[nn.Linear]
     ) -> torch.Tensor:
-        """
-        :param feature_activations: Feature activations f(x_j), shape (batch, F)
-        :type feature_activations: Tensor
-        :param layer_targets: Dict mapping layer index l to true activations a^l(x_j), each of shape (batch, D_l)
-        :type layer_targets: dict[int, Tensor]
-        :return: Scalar loss value
-        :rtype: Tensor
-        """
         # MSE reconstruction loss
-        recon_loss = F.mse_loss(reconstructed_model_activations_LBD, model_activations_LBD, reduction="sum")
+        recon_loss = F.mse_loss(
+            reconstructed_model_activations_BLPD,
+            model_activations_BLPD,
+            reduction="sum",
+            weight=attention_mask,
+        )
 
         # Compute regularization term:
         decoder_weights = [linear.weight for linear in decoder_LFD]
@@ -115,3 +113,14 @@ class CrossCoderL1Loss(nn.Module):
         # Total loss: sum over batch
         total_loss = recon_loss + reg_loss.sum()
         return total_loss
+
+        """
+        :param model_activations_BLPD: Feature activations f(x_j), shape (batch, F)
+        :type feature_activations: Tensor
+        :param reconstructed_model_activations_BLPD: Dict mapping layer index l to true activations a^l(x_j), each of shape (batch, D_l)
+        :type layer_targets: dict[int, Tensor]
+        :param encoded_representations_BPF: 
+        :type encoded_representations_BPF: 
+        :return: Scalar loss value
+        :rtype: Tensor
+        """

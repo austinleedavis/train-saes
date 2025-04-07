@@ -61,11 +61,11 @@ class SparseCrosscoder(L.LightningModule):
     dict_size: int
     """(F) Size of the SAE's feature dictionary, i.e. the expanded latent space"""
     encoder_LDF: nn.ModuleList  # type: nn.ModuleList[nn.Linear]
-    """List of linear encoders which map from d_model (D) to feature dictionary (F) for each layer (L)"""
-    encoder_bias: nn.Parameter
+    """List of (L) linear encoders which map from d_model (D) to feature dictionary (F)"""
+    encoder_bias_F: nn.Parameter
     """The single, shared bias term common to all layers of the encoder"""
     decoder_LFD: nn.ModuleList  # type: nn.ModuleList[nn.Linear]
-    """List of linear decoders which map from feature dictionary (F) to d_model (D) for each layer (L). Each layer has its own bias."""
+    """List of (L) linear decoders which map from feature dictionary (F) to d_model (D). Each layer has its own bias."""
     activation_fn: nn.Module
     """Nonlinear activation applied after both encoding and decoding."""
     loss_fn: nn.Module
@@ -92,19 +92,18 @@ class SparseCrosscoder(L.LightningModule):
             [nn.Linear(activation_dim, dict_size, bias=False) for _ in range(n_layers)]
         )
         # initialize bias
-        self.encoder_bias = nn.Parameter(torch.empty(dict_size))
+        self.encoder_bias_F = nn.Parameter(torch.empty(dict_size))
         bound = 1 / math.sqrt(self.activation_dim) if self.activation_dim > 0 else 0
-        init.uniform_(self.encoder_bias, -bound, bound)
+        init.uniform_(self.encoder_bias_F, -bound, bound)
 
         # initialize decoder weights
         self.decoder_LFD = nn.ModuleList(
             [nn.Linear(dict_size, activation_dim, bias=True) for _ in range(n_layers)]
         )
         self.activation_fn = activation_fn
-        self.loss_fn = CrossCoderL1Loss()
+        self.train(True)
 
-        self.save_hyperparameters(ignore=["loss_fn"])
-        # self.save_hyperparameters()
+        self.save_hyperparameters(ignore=["loss_fn", "activation_fn"])
 
     def train(self, mode=True):
         if mode:
@@ -113,7 +112,7 @@ class SparseCrosscoder(L.LightningModule):
             self.loss_fn = MSELoss()
         return super().train(mode)
 
-    def encode(self, model_activations_BLD: torch.Tensor) -> torch.Tensor:
+    def encode(self, model_activations_BLPD: torch.Tensor) -> torch.Tensor:
         """
         Encodes the input activation vectors into a sparse latent representation.
 
@@ -122,12 +121,13 @@ class SparseCrosscoder(L.LightningModule):
         :return: Encoded sparse representation of shape [B, P, F].
         :rtype: Tensor"""
         outputs = [
-            linear(model_activations_BLD[:, layer_idx]) for layer_idx, linear in enumerate(self.encoder_LDF)
+            linear(model_activations_BLPD[:, layer_idx])
+            for layer_idx, linear in enumerate(self.encoder_LDF)
         ]
 
         summed = torch.stack(outputs).sum(dim=0)
 
-        return self.activation_fn(summed + self.encoder_bias)
+        return self.activation_fn(summed + self.encoder_bias_F)
 
     def decode(self, encoded_representation_BPF: torch.Tensor) -> torch.Tensor:
         """
@@ -142,42 +142,56 @@ class SparseCrosscoder(L.LightningModule):
 
         return torch.stack(outputs, dim=1)  # dim=1 puts batch at index 0 as desired
 
-    def forward(self, model_activations_LD: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self,
+        model_activations_BLPD: torch.Tensor,
+        attention_mask_BLPD: torch.Tensor = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        :param model_activations_LD: Activations tensor with shape [L, ..., d_model]
-        :type model_activations_LD: Tensor
-        :return: Tuple of (reconstructed activations [..., D], encoded representation [..., F]).
-        :rtype: tuple[Tensor, Tensor]
+        Performs a forward pass on a batch of the model activations. If an attention mask is given,
+        the loss will be computed on the batched inputs
+        :param model_activations_BLPD: Input activations of shape [Batch, Layers, Position, D_model].
+        :type model_activations_BLPD: torch.Tensor
+        :param attention_mask_BLPD: Attention mask used if input activations were padded.
+        :type attention_mask_BLPD: torch.Tensor
+
         """
-        encoded_representation_F = self.encode(model_activations_LD)
-        reconstructed_model_activations_LD = self.decode(encoded_representation_F)
-        return reconstructed_model_activations_LD, encoded_representation_F
+
+        encoded_representation_BPF = self.encode(model_activations_BLPD)
+        reconstructed_model_activations_BLPD = self.decode(encoded_representation_BPF)
+
+        if attention_mask_BLPD is not None:
+            loss = self.loss_fn(
+                model_activations_BLPD,
+                reconstructed_model_activations_BLPD,
+                encoded_representation_BPF,
+                attention_mask_BLPD,
+                self.decoder_LFD,
+            )
+            return reconstructed_model_activations_BLPD, encoded_representation_BPF, loss
+        else:
+            return reconstructed_model_activations_BLPD, encoded_representation_BPF
 
     def configure_optimizers(self):
         optimizer = ConstrainedAdam(self.parameters(), self.decoder_LFD.parameters(), lr=self.lr)
         return {"optimizer": optimizer}
 
-    def step(self, model_activations_BD: torch.Tensor):
-        reconstructed_model_activations_BD, encoded_representation_BF = self.forward(model_activations_BD)
-        loss = self.loss_fn(
-            model_activations_BD,
-            reconstructed_model_activations_BD,
-            encoded_representation_BF,
-            self.decoder_LFD,
-        )
+    def step(self, model_activations_BLPD: torch.Tensor, attention_mask_BLPD: torch.Tensor = None):
+        *_, loss = self.forward(model_activations_BLPD, attention_mask_BLPD)
+
         return loss
 
-    def training_step(self, model_activations_BD: torch.Tensor):
-        loss = self.step(model_activations_BD)
+    def training_step(self, model_activations_BLPD: torch.Tensor):
+        loss = self.step(model_activations_BLPD)
         self.log("train/loss", loss)
         return {"loss": loss}
 
-    def validation_step(self, model_activations_BD: torch.Tensor):
-        loss = self.step(model_activations_BD)
+    def validation_step(self, model_activations_BLPD: torch.Tensor):
+        loss = self.step(model_activations_BLPD)
         self.log("validation/loss", loss)
         return {"loss": loss}
 
-    def test_step(self, model_activations_BD: torch.Tensor):
-        loss = self.step(model_activations_BD)
+    def test_step(self, model_activations_BLPD: torch.Tensor):
+        loss = self.step(model_activations_BLPD)
         self.log("test/loss", loss)
         return {"loss": loss}
