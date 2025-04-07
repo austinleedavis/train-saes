@@ -19,8 +19,9 @@ class SingleLayerHiddenStateCollator:
         """
         batch_BLPD comes in as a list of dict-records
         HiddenState dimension is [Batch, Layer, Position, Dimension]"""
-        print(f"{batch_BLPD=}")
         print(f"{type(batch_BLPD)=}")
+        print(f"{len(batch_BLPD)=}")
+        print(f"{(batch_BLPD[0]['HiddenStates'].shape)=}")
         return torch.stack(batch_BLPD[0]["HiddenStates"])  # TODO, remove the [0] index
 
 
