@@ -112,32 +112,32 @@ class SparseCrosscoder(L.LightningModule):
             self.loss_fn = MSELoss()
         return super().train(mode)
 
-    def encode(self, model_activations_LD: torch.Tensor) -> torch.Tensor:
+    def encode(self, model_activations_BLD: torch.Tensor) -> torch.Tensor:
         """
         Encodes the input activation vectors into a sparse latent representation.
 
-        :param model_activations_LD: Input activations of shape [L,..., D].
+        :param model_activations_LD: Input activations of shape [B, L, P, D].
         :type model_activations_LD: Tensor
-        :return: Encoded sparse representation of shape [..., F].
+        :return: Encoded sparse representation of shape [B, P, F].
         :rtype: Tensor"""
         outputs = [
-            linear(model_activations_LD[layer_idx]) for layer_idx, linear in enumerate(self.encoder_LDF)
+            linear(model_activations_BLD[:, layer_idx]) for layer_idx, linear in enumerate(self.encoder_LDF)
         ]
 
         summed = torch.stack(outputs).sum(dim=0)
 
         return self.activation_fn(summed + self.encoder_bias)
 
-    def decode(self, encoded_representation_F: torch.Tensor) -> torch.Tensor:
+    def decode(self, encoded_representation_BPF: torch.Tensor) -> torch.Tensor:
         """
         Decodes the latent representation back into the original activation space.
 
-        :param encoded_representation_F: Sparse representation of shape [..., F].
-        :type encoded_representation_F: Tensor
-        :return: Reconstructed activations of shape [L,..., D].
+        :param encoded_representation_BPF: Sparse representation of shape [B, P, F].
+        :type encoded_representation_BPF: Tensor
+        :return: Reconstructed activations of shape [B, L, P, D].
         :rtype: Tensor"""
 
-        outputs = [linear(encoded_representation_F) for linear in self.decoder_LFD]
+        outputs = [linear(encoded_representation_BPF) for linear in self.decoder_LFD]
 
         return torch.stack(outputs)
 
