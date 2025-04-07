@@ -46,7 +46,7 @@ def main():
             NtfyCallback(os.environ.get("NTFY_TOPIC", None)),
             ModelCheckpoint(
                 dirpath="models",
-                monitor="val_loss",  # metric to monitor
+                monitor=r"validation/loss",  # metric to monitor
                 mode="min",  # minimize val_acc
                 save_top_k=2,  # keep only top 2 checkpoints
                 save_last=True,  # also save the last checkpoint
