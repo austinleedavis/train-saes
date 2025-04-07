@@ -140,7 +140,7 @@ class SparseCrosscoder(L.LightningModule):
 
         outputs = [linear(encoded_representation_BPF) for linear in self.decoder_LFD]
 
-        return torch.stack(outputs)
+        return torch.stack(outputs, dim=1)  # dim=1 puts batch at index 0 as desired
 
     def forward(self, model_activations_LD: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
