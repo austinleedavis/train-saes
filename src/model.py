@@ -184,17 +184,20 @@ class SparseCrosscoder(L.LightningModule):
 
         return loss
 
-    def training_step(self, model_activations_BLPD: torch.Tensor, attention_mask_BLPD: torch.Tensor):
+    def training_step(self, batch_data: tuple[torch.Tensor, torch.Tensor]):
+        model_activations_BLPD, attention_mask_BLPD = batch_data
         loss = self.step(model_activations_BLPD, attention_mask_BLPD)
         self.log("train/loss", loss)
         return {"loss": loss}
 
-    def validation_step(self, model_activations_BLPD: torch.Tensor, attention_mask_BLPD: torch.Tensor):
+    def validation_step(self, batch_data: tuple[torch.Tensor, torch.Tensor]):
+        model_activations_BLPD, attention_mask_BLPD = batch_data
         loss = self.step(model_activations_BLPD, attention_mask_BLPD)
         self.log("validation/loss", loss)
         return {"loss": loss}
 
-    def test_step(self, model_activations_BLPD: torch.Tensor, attention_mask_BLPD: torch.Tensor):
+    def test_step(self, batch_data: tuple[torch.Tensor, torch.Tensor]):
+        model_activations_BLPD, attention_mask_BLPD = batch_data
         loss = self.step(model_activations_BLPD, attention_mask_BLPD)
         self.log("test/loss", loss)
         return {"loss": loss}
