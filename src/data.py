@@ -31,8 +31,11 @@ class HiddenStateCollator:
             [[1] * t.shape[-2] + [0] * (max_len - t.shape[-2]) for t in hidden_states],
             dtype=torch.long,
         )
-        attention_BLPD = attention_BP[:, None, :, None].expand(-1, 12, -1, 768)
 
+        attention_BLPD = attention_BP[:, None, :, None].expand(-1, 12, -1, 768)
+        print(f"{attention_BP=}")
+        print(f"{attention_BP.shape=}")
+        exit()
         return stacked, attention_BLPD
 
 
