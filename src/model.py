@@ -137,9 +137,7 @@ class SparseCrosscoder(L.LightningModule):
         :return: Reconstructed activations of shape [L,..., D].
         :rtype: Tensor"""
 
-        outputs = [
-            linear(encoded_representation_F[layer_idx]) for layer_idx, linear in enumerate(self.decoder_LFD)
-        ]
+        outputs = [linear(encoded_representation_F) for linear in self.decoder_LFD]
 
         return torch.stack(outputs)
 

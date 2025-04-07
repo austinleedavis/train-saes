@@ -19,7 +19,7 @@ class SingleLayerHiddenStateCollator:
         """
         batch_BLPD comes in as a list of dict-records
         HiddenState dimension is [Batch, Layer, Position, Dimension]"""
-        return batch_BLPD[0]["HiddenStates"][self.layer]
+        return torch.stack(batch_BLPD[0]["HiddenStates"])  # TODO, remove the [0] index
 
 
 class SaeDataModule(LightningDataModule):
