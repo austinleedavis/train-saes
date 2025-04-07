@@ -70,7 +70,7 @@ class SparseCrosscoder(L.LightningModule):
     """Nonlinear activation applied after both encoding and decoding."""
     loss_fn: nn.Module
     """oss function used during training (e.g. L1-weighted reconstruction loss)."""
-    lr: float = 0.0001
+    lr: float = 0.000001
     """Learning rate used for optimization."""
 
     def __init__(
