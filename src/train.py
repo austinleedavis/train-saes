@@ -23,7 +23,7 @@ def main():
     data = SaeDataModule(
         data_root=data_root,
         collator=HiddenStateCollator(),
-        batch_size=256,
+        batch_size=128,
         num_workers=15,
         num_proc=64,
     )
@@ -42,7 +42,7 @@ def main():
         max_epochs=10,
         val_check_interval=1.0,  # When using an IterableDataset you must set the val_check_interval to 1.0
         callbacks=[
-            # NtfyCallback(os.environ.get("NTFY_TOPIC", None)),
+            NtfyCallback(os.environ.get("NTFY_TOPIC", None)),
             ModelCheckpoint(
                 dirpath="models",
                 monitor="val_loss",  # metric to monitor
@@ -53,19 +53,19 @@ def main():
                 filename="epoch-{epoch}-step-{step}-{val_loss:.4f}",  # custom filename
             ),
         ],
-        # logger=WandbLogger(
-        #     name="test",
-        #     project="TrainSae",
-        #     log_model=False,
-        #     checkpoint_name=None,
-        # ),
+        logger=WandbLogger(
+            name="test",
+            project="TrainSae",
+            log_model=False,
+            checkpoint_name=None,
+        ),
     )
 
-    tuner = Tuner(trainer)
-    initial_lr = tuner.lr_find(model=model, datamodule=data)
+    # tuner = Tuner(trainer)
+    # initial_lr = tuner.lr_find(model=model, datamodule=data)
     # batch_size = tuner.scale_batch_size(model=model, datamodule=data, max_trials=10)
 
-    ntfy = Ntfy(topic=os.environ.get("NTFY_TOPIC", None))
+    # ntfy = Ntfy(topic=os.environ.get("NTFY_TOPIC", None))
     # ntfy.send_notification(f"Tuner Finished. {initial_lr.suggestion()=} {batch_size=}")
 
     trainer.fit(model=model, datamodule=data)
