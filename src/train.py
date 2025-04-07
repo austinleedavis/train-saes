@@ -8,7 +8,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.tuner import Tuner
 
 from src.callbacks import NtfyCallback, WandbLogger
-from src.data import SaeDataModule, SingleLayerHiddenStateCollator
+from src.data import HiddenStateCollator, SaeDataModule
 from src.model import SparseCrosscoder
 from src.utils.ntfy import Ntfy
 
@@ -22,7 +22,7 @@ def main():
 
     data = SaeDataModule(
         data_root=data_root,
-        collator=SingleLayerHiddenStateCollator(layer=10),
+        collator=HiddenStateCollator(),
         batch_size=2,
         num_workers=15,
         num_proc=64,
