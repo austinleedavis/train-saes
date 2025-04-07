@@ -33,8 +33,7 @@ class HiddenStateCollator:
         )
 
         attention_BLPD = attention_BP[:, None, :, None].expand(-1, 12, -1, 768)
-        print(f"{attention_BLPD=}")
-        print(f"{attention_BLPD.shape=}")
+
         return stacked, attention_BLPD
 
 
