@@ -107,7 +107,7 @@ class CrossCoderL1Loss(nn.Module):
 
         # Compute regularization term:
         decoder_weights = [linear.weight for linear in decoder_LFD]
-        decoder_weights_LFD = torch.stack(self.decoder_weights)
+        decoder_weights_LFD = torch.stack(decoder_weights)
         decoder_norms_LF = decoder_weights_LFD.norm(dim=-1)  # L2 of weights
         decoder_l1_of_norms_F = decoder_norms_LF.sum(dim=0)  # L1 of L2 norms
         reg_loss = encoded_representations_BF @ decoder_l1_of_norms_F  # scale encoding by L1 norms
