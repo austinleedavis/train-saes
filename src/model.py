@@ -126,7 +126,7 @@ class SparseCrosscoder(L.LightningModule):
             for layer_idx, linear in enumerate(self.encoder_LDF)
         ]
 
-        summed = torch.stack(outputs).sum(dim=0)
+        summed = torch.stack(outputs).sum(dim=0)  # dim: [B, P, D]
 
         return self.activation_fn(summed + self.encoder_bias_F)
 

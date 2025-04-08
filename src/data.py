@@ -90,6 +90,7 @@ class SaeDataModule(LightningDataModule):
             num_workers=self.num_workers,
             collate_fn=self.collator,
             shuffle=False,
+            drop_last=True,
         )
         return loader
 
