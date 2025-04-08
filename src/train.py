@@ -23,7 +23,7 @@ def main():
     data = SaeDataModule(
         data_root=data_root,
         collator=HiddenStateCollator(),
-        batch_size=128,
+        batch_size=64,
         num_workers=15,
         num_proc=64,
     )
