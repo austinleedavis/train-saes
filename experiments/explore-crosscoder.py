@@ -69,9 +69,21 @@ def collate(record):
 
 # %%
 
+############
+# Setup Probe
+############
+
+# Use this line if training from scratch:
 probe = torch.nn.ModuleList([torch.nn.Linear(scc.dict_size, len(stoi), bias=True) for _ in range(64)]).to(
     DEVICE
 )
+
+# Use this block if loading from checkpoint:
+CKPT_TO_LOAD = "models/probe-step-606659-loss-0.37444.pt"
+ckpt = torch.load(CKPT_TO_LOAD, weights_only=False)
+probe = ckpt["probe"]
+
+print(probe)
 
 
 # %%
@@ -102,6 +114,7 @@ CHECKPOINT_INTERVAL = 1000
 GRADIENT_ACCUM_STEPS = 10
 NUM_CHECKPOINTS = 3
 POS_OFFSET = 0
+POS_STEP_SIZE = 3
 POS_COUNT = 24
 NUM_EPOCHS = 5
 LOG_FILE = "models/probe.log"
@@ -136,8 +149,8 @@ with open(LOG_FILE, "a") as log:
             features = scc.encode(model_activations_BLPD).squeeze()  # eliminate batch dim
 
             predictions = torch.stack([p(features) for p in probe]).permute(0, 2, 1)
-            selected_predictions = predictions[:, :, -POS_COUNT:][:, :, POS_OFFSET::3]
-            selected_boards = boards[:, -POS_COUNT:][:, POS_OFFSET::3]
+            selected_predictions = predictions[:, :, -POS_COUNT:][:, :, POS_OFFSET::POS_STEP_SIZE]
+            selected_boards = boards[:, -POS_COUNT:][:, POS_OFFSET::POS_STEP_SIZE]
             loss = loss_fn(selected_predictions, selected_boards)
             loss.backward()
 
@@ -175,12 +188,35 @@ px.line(
     labels=dict(x="Step", y="Loss"),
 ).show()
 # %%
+
+####################################
+# EXPLORING PROBE BELOW
+####################################
+
+
+##################
+# Setup probe exploration data
+##################
+record = ds[0]
+
+model_activations_BLPD, transcript, boards, text_encoding = collate(record).values()
+features = scc.encode(model_activations_BLPD).squeeze()  # eliminate batch dim
+predictions = torch.stack([p(features) for p in probe]).permute(0, 2, 1)
+
+
+# %%
+
+##################
+# Exploration results
+##################
+
 preds = predictions.detach().to("cpu").squeeze().softmax(1).view(8, 8, 13, -1)[:, :, 1:]
-pos_offset = 1
+POS_OFFSET = 4
+POS_STEP_SIZE = 3
 fig = px.imshow(
-    preds[:, :, :, pos_offset::3].flip(0),
+    preds[:, :, :, POS_OFFSET::POS_STEP_SIZE].flip(0),
     facet_col=2,
-    title=f"{pos_offset=}",
+    title=f"{POS_OFFSET=}",
     facet_col_wrap=6,
     animation_frame=3,
 )
@@ -196,7 +232,7 @@ px.imshow(
     .to("cpu")
     .squeeze()
     .max(1, keepdim=True)
-    .indices.view(8, 8, 1, -1)[:, :, :, 4::6]
+    .indices.view(8, 8, 1, -1)[:, :, :, POS_OFFSET::POS_STEP_SIZE]
     .flip(0),
     animation_frame=3,
     facet_col=2,
@@ -215,7 +251,9 @@ def label(val):
 
 
 pred = predictions.detach().to("cpu").squeeze()
-frame_tensor = pred.max(1, keepdim=True).indices.view(8, 8, 1, -1)[:, :, :, 4::6].flip(0)
+frame_tensor = (
+    pred.max(1, keepdim=True).indices.view(8, 8, 1, -1)[:, :, :, POS_OFFSET::POS_STEP_SIZE].flip(0)
+)
 
 fig = px.imshow(
     frame_tensor,
