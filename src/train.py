@@ -30,7 +30,7 @@ def main():
 
     model = SparseCrosscoder(
         activation_dim=768,
-        dict_size=768 * 4,
+        dict_size=768 * 64,
         n_layers=12,
     )
 
@@ -38,7 +38,7 @@ def main():
         accelerator="auto",
         fast_dev_run=False,
         reload_dataloaders_every_n_epochs=1,
-        limit_test_batches=0,
+        # limit_test_batches=0,
         # limit_val_batches=0,
         max_epochs=7,
         val_check_interval=1.0,  # When using an IterableDataset you must set the val_check_interval to 1.0
@@ -55,7 +55,7 @@ def main():
             ),
         ],
         logger=WandbLogger(
-            name="test",
+            name="train_scc",
             project="TrainSae",
             log_model=False,
             checkpoint_name=None,
