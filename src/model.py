@@ -198,3 +198,20 @@ class SparseCrosscoder(L.LightningModule):
         loss = self.step(model_activations_BLPD, attention_mask_BLPD)
         self.log("test/loss", loss)
         return {"loss": loss}
+
+    @classmethod
+    def from_pretrained(cls, state_dict_path: str, **kwargs):
+        state_dict = torch.load(state_dict_path, map_location="cpu")
+
+        dict_size, activation_dim = state_dict["encoder_LDF.0.weight"].shape
+        n_layers = len([k for k in state_dict if k.startswith("encoder") and k.endswith(".weight")])
+
+        with torch.device("meta"):
+            model = cls(
+                activation_dim=activation_dim,
+                dict_size=dict_size,
+                n_layers=n_layers,
+            )
+
+        model.load_state_dict(state_dict, assign=True)
+        return model
