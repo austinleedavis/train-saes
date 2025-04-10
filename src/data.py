@@ -37,6 +37,22 @@ class HiddenStateCollator:
         return stacked, attention_BLPD
 
 
+class SingleHiddenStateCollator:
+
+    def __call__(self, batch_BLD: list[dict[str, torch.Tensor]]) -> torch.Tensor:
+        """
+        batch_BLD comes in as a list of dict-records with shape Batch
+        BLD is [Batch, dict[Tensor[Layer, Dimension]]]
+        HiddenState dimension is [Layer, Dimension]"""
+        hidden_states = [x["HiddenStates"] for x in batch_BLD]
+        stacked_BLD = torch.stack(hidden_states, dim=0)  # shape: (batch, L, D)
+
+        stacked_BLPD = stacked_BLD.unsqueeze(2)
+        attention_BLPD = torch.ones_like(stacked_BLPD)
+
+        return stacked_BLPD, attention_BLPD
+
+
 class SaeDataModule(LightningDataModule):
 
     data_root: str
@@ -89,7 +105,7 @@ class SaeDataModule(LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             collate_fn=self.collator,
-            shuffle=False,
+            shuffle=shuffle,
             drop_last=True,
         )
         return loader
