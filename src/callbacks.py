@@ -1,4 +1,5 @@
 import os
+import signal
 import threading
 
 import lightning.pytorch.callbacks as callbacks
@@ -11,21 +12,21 @@ class NtfyCallback(callbacks.Callback):
 
     _stop_training: bool = False
     stop_phrase: str
+    main_process_id: int
     """Keyword to stop training."""
 
     def __init__(self, topic, stop_phrase="00-00-00"):
         super().__init__()
         self.stop_phrase = stop_phrase
         self.ntfy = Ntfy(topic=topic)
+        self.main_process_id = os.getpid()
         threading.Thread(target=self.ntfy.subscribe, args=(self.handle_message,), daemon=True).start()
-
-    def on_train_batch_start(self, trainer, pl_module, batch, batch_idx):
-        if self._stop_training:
-            trainer.should_stop = True
 
     def handle_message(self, message):
         if message.strip().lower().strip() == self.stop_phrase:
             self._stop_training = True
+            self.ntfy.send_notification(f'Received stop phrase: "{self.stop_phrase}"')
+            os.kill(self.main_process_id, signal.SIGINT)
 
     def setup(self, trainer, pl_module, stage):
         if trainer.global_rank == 0:
@@ -33,7 +34,7 @@ class NtfyCallback(callbacks.Callback):
                 return
             extra_headers = self._get_extra_headers(trainer, pl_module)
             self.ntfy.send_notification(
-                f"🤖 {stage.split()[-1]} started. Respond with {self.stop_phrase} to stop run.",
+                f'🤖 {stage.split()[-1].upper()} started. Respond with "{self.stop_phrase}" to stop run.',
                 extra_headers=extra_headers,
             )
 
@@ -42,7 +43,9 @@ class NtfyCallback(callbacks.Callback):
             if self._skip_tuner_callbacks(trainer):
                 return
             extra_headers = self._get_extra_headers(trainer, pl_module)
-            self.ntfy.send_notification(f"🏆️ {stage} finished", extra_headers=extra_headers)
+            self.ntfy.send_notification(
+                f"🏆️ {stage.split()[-1].upper()} finished", extra_headers=extra_headers
+            )
 
     def on_exception(self, trainer, pl_module, exception):
         if trainer.global_rank == 0:
