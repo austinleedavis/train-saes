@@ -10,11 +10,12 @@ from src.utils.ntfy import Ntfy
 class NtfyCallback(callbacks.Callback):
 
     _stop_training: bool = False
-    run_name: str = "00-00-00"
+    stop_phrase: str
     """Keyword to stop training."""
 
-    def __init__(self, topic):
+    def __init__(self, topic, stop_phrase="00-00-00"):
         super().__init__()
+        self.stop_phrase = stop_phrase
         self.ntfy = Ntfy(topic=topic)
         threading.Thread(target=self.ntfy.subscribe, args=(self.handle_message,), daemon=True).start()
 
@@ -23,7 +24,7 @@ class NtfyCallback(callbacks.Callback):
             trainer.should_stop = True
 
     def handle_message(self, message):
-        if message.strip().lower().strip() == self.run_name:
+        if message.strip().lower().strip() == self.stop_phrase:
             self._stop_training = True
 
     def setup(self, trainer, pl_module, stage):
@@ -32,7 +33,7 @@ class NtfyCallback(callbacks.Callback):
                 return
             extra_headers = self._get_extra_headers(trainer, pl_module)
             self.ntfy.send_notification(
-                f"🤖 {stage.split()[-1]} started. Respond with {self.run_name} to stop run.",
+                f"🤖 {stage.split()[-1]} started. Respond with {self.stop_phrase} to stop run.",
                 extra_headers=extra_headers,
             )
 
@@ -53,7 +54,6 @@ class NtfyCallback(callbacks.Callback):
 
     def _get_extra_headers(self, trainer, pl_module):
         extra_headers = {"Title": f"Train SAEs"}
-        self.run_name = "STOP"
         for logger in trainer.loggers:
             if isinstance(logger, WandbLogger):
                 run = logger.experiment
