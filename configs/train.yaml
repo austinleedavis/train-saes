@@ -1,10 +1,12 @@
 
 data:
-  _target_: src.data.SaeDataModule
-  data_root: ${oc.env:DATA_ROOT}
-  collator: 
-    _target_: src.data.SingleHiddenStateCollator
-  batch_size: 1024
+  max_workers: 5
+  instance:
+    _target_: src.data.SaeDataModule
+    data_root: ${oc.env:DATA_ROOT}
+    collator: 
+      _target_: src.data.SingleHiddenStateCollator
+    batch_size: 2024
 
 model: 
   _target_: src.model.SparseCrosscoder

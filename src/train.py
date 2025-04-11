@@ -38,9 +38,9 @@ def main(cfg: DictConfig):
     allocated_cpus = len(os.sched_getaffinity(0))
 
     data = instantiate(
-        cfg.data,
-        num_workers=allocated_cpus,  # use as many as allocated to load Hf dataset
-        num_proc=min(32, allocated_cpus),  # 32=max recommended by pt lightning
+        cfg.data.instance,
+        num_workers=min(cfg.data.max_workers, allocated_cpus),  # 32 is max recommended by pt lightning
+        num_proc=min(32, allocated_cpus),  # use as many as allocated to load Hf dataset
     )
 
     model = instantiate(cfg.model)
