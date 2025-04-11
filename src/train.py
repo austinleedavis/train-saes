@@ -1,82 +1,72 @@
 import os
 
-import dotenv
+import hydra
+import pyrootutils
 import torch
+from hydra.utils import instantiate
 from lightning.pytorch import Trainer
-from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks import Callback, ModelCheckpoint
 from lightning.pytorch.tuner import Tuner
+from omegaconf import DictConfig
 
-from src.callbacks import NtfyCallback, WandbLogger
-from src.data import SaeDataModule, SingleHiddenStateCollator
-from src.model import SparseCrosscoder
 from src.utils.ntfy import Ntfy
 
 torch.set_float32_matmul_precision("medium")
 
-dotenv.load_dotenv()
+_root = pyrootutils.setup_root(
+    search_from=__file__,
+    indicator=[".git", ".env"],
+    pythonpath=True,
+    dotenv=True,
+)
+
+_HYDRA_PARAMS = {
+    "version_base": "1.3",
+    "config_path": (
+        os.path.join(_root, os.environ.get("HYDRA_CONFIG_PATH", None))
+        if os.environ.get("HYDRA_CONFIG_PATH", None)
+        else str(_root / "configs")
+    ),
+    "config_name": "train.yaml",
+}
 
 
-def main():
+@hydra.main(**_HYDRA_PARAMS)
+def main(cfg: DictConfig):
 
-    data_root = os.environ.get("DATA_ROOT", "data")
-
-    data = SaeDataModule(
-        data_root=data_root,
-        collator=SingleHiddenStateCollator(),
-        batch_size=1024,
-        num_workers=15,
-        num_proc=64,
+    data = instantiate(
+        cfg.data,
+        num_workers=os.cpu_count(),
+        num_proc=min(15, os.cpu_count()),
     )
 
-    model = SparseCrosscoder(
-        activation_dim=768,
-        dict_size=768 * 13,
-        n_layers=13,
-    )
+    model = instantiate(cfg.model)
 
-    checkpointer = ModelCheckpoint(
-        dirpath="models",
-        monitor=r"validation/loss",  # metric to monitor
-        mode="min",  # minimize val_acc
-        save_top_k=2,  # keep only top 2 checkpoints
-        save_last=True,  # also save the last checkpoint
-        every_n_train_steps=1000,  # checkpoint every 1000 training steps
-        filename="epoch-{epoch}-step-{step}-{val_loss:.4f}",  # custom filename
-    )
+    callbacks: list[Callback] = instantiate(cfg.callbacks)
 
-    trainer = Trainer(
-        accelerator="auto",
-        fast_dev_run=False,
-        precision="bf16-true",
-        reload_dataloaders_every_n_epochs=1,
-        # limit_test_batches=0,
-        # limit_val_batches=0,
-        max_epochs=1,
-        val_check_interval=1.0,  # When using an IterableDataset you must set the val_check_interval to 1.0
-        callbacks=[
-            checkpointer,
-            NtfyCallback(os.environ.get("NTFY_TOPIC", None)),
-        ],
-        logger=WandbLogger(
-            name="train_scc",
-            project="TrainSae",
-            log_model=False,
-            checkpoint_name=None,
-        ),
-    )
+    trainer: Trainer = instantiate(cfg.trainer, callbacks=callbacks)
 
-    tuner = Tuner(trainer)
-    initial_lr = tuner.lr_find(model=model, datamodule=data)
-    batch_size = tuner.scale_batch_size(model=model, datamodule=data, max_trials=10)
+    if "tuner" in cfg:
+        tuner = Tuner(trainer=trainer)
+        results = {}
+        if "lr_find" in cfg.tuner:
+            initial_lr = tuner.lr_find(model=model, datamodule=data)
 
-    ntfy = Ntfy(topic=os.environ.get("NTFY_TOPIC", None))
-    ntfy.send_notification(f"Tuner Finished. {initial_lr.suggestion()=} {batch_size=}")
+            results["initial_lr"] = initial_lr.results
+        if "scale_batch_size" in cfg.tuner:
+            scale_batch_size = tuner.scale_batch_size(model=model, datamodule=data, max_trials=10)
+            results["scale_batch_size"] = scale_batch_size
+
+        ntfy = Ntfy(topic=os.environ.get("NTFY_TOPIC", None))
+        ntfy.send_notification(f"Tuner Finished: {list(results.items())}")
 
     trainer.fit(model=model, datamodule=data)
 
-    filename = checkpointer.last_model_path.replace(".ckpt", "-statedict.pt")
-    torch.save(model.state_dict(), filename)
-    print(f"Saved state dict to: {filename}")
+    for cb in callbacks:
+        if isinstance(cb, ModelCheckpoint):
+            filename = cb.last_model_path.replace(".ckpt", "-statedict.pt")
+            torch.save(model.state_dict(), filename)
+            print(f"Saved state dict to: {filename}")
 
     trainer.test(model=model, datamodule=data)
 

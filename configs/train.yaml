@@ -1,0 +1,47 @@
+
+data:
+  _target_: src.data.SaeDataModule
+  data_root: ${oc.env:DATA_ROOT}
+  collator: 
+    _target_: src.data.SingleHiddenStateCollator
+  batch_size: 1024
+
+model: 
+  _target_: src.model.SparseCrosscoder
+  activation_dim: 768
+  dict_size: 9984
+  n_layers: 13
+
+tuner:
+  - lr_find
+  - scale_batch_size
+
+callbacks:
+  - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+    dirpath: ${hydra:run.dir}/checkpoints
+    monitor: validation/loss
+    mode: min
+    save_top_k: 2
+    save_last: True
+    every_n_train_steps: 1000
+    filename: epoch-{epoch}-step-{step}-{val_loss:.4f}
+  - _target_: src.callbacks.NtfyCallback
+    topic: ${oc.env:NTFY_TOPIC}
+
+trainer: 
+  _target_: lightning.pytorch.Trainer
+  accelerator: auto
+  fast_dev_run: False
+  precision: bf16-true
+  reload_dataloaders_every_n_epochs: 1
+  # limit_test_batches: 0
+  # limit_val_batches: 0
+  max_epochs: 1
+  callbacks: 
+    - ${callbacks}
+  logger: 
+    _target_: src.callbacks.WandbLogger
+    name: train_scc
+    project: TrainSae
+    log_model: False
+    checkpoint_name: None
