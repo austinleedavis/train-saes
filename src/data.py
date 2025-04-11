@@ -59,7 +59,9 @@ class SaeDataModule(LightningDataModule):
     collator: Callable
     batch_size: int
     num_workers: int
+    """Number of works used by dataloaders"""
     num_proc: int
+    """Number of processes used to load the dataset from disk"""
     hf_dataset: IterableDataset = None
     train_split: Dataset = None
     val_split: Dataset = None
