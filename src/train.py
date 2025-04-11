@@ -34,10 +34,13 @@ _HYDRA_PARAMS = {
 @hydra.main(**_HYDRA_PARAMS)
 def main(cfg: DictConfig):
 
+    # get number of cpus allocated to the job
+    allocated_cpus = len(os.sched_getaffinity(0))
+
     data = instantiate(
         cfg.data,
-        num_workers=os.cpu_count(),
-        num_proc=min(15, os.cpu_count()),
+        num_workers=allocated_cpus,  # use as many as allocated to load Hf dataset
+        num_proc=min(32, allocated_cpus),  # 32=max recommended by pt lightning
     )
 
     model = instantiate(cfg.model)
