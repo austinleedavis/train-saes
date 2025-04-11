@@ -57,7 +57,7 @@ def main(cfg: DictConfig):
 
             results["initial_lr"] = initial_lr.results
         if "scale_batch_size" in cfg.tuner:
-            scale_batch_size = tuner.scale_batch_size(model=model, datamodule=data, max_trials=10)
+            scale_batch_size = tuner.scale_batch_size(model=model, datamodule=data)
             results["scale_batch_size"] = scale_batch_size
 
         ntfy = Ntfy(topic=os.environ.get("NTFY_TOPIC", None))
