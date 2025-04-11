@@ -1,13 +1,13 @@
 import os
 import threading
 
-from lightning.pytorch.callbacks import Callback
+import lightning.pytorch.callbacks as callbacks
 from lightning.pytorch.loggers.wandb import WandbLogger
 
 from src.utils.ntfy import Ntfy
 
 
-class NtfyCallback(Callback):
+class NtfyCallback(callbacks.Callback):
 
     _stop_training: bool = False
     run_name: str = "00-00-00"
@@ -16,9 +16,7 @@ class NtfyCallback(Callback):
     def __init__(self, topic):
         super().__init__()
         self.ntfy = Ntfy(topic=topic)
-        threading.Thread(
-            target=self.ntfy.subscribe, args=(self.handle_message,), daemon=True
-        ).start()
+        threading.Thread(target=self.ntfy.subscribe, args=(self.handle_message,), daemon=True).start()
 
     def on_train_batch_start(self, trainer, pl_module, batch, batch_idx):
         if self._stop_training:
@@ -30,7 +28,9 @@ class NtfyCallback(Callback):
 
     def setup(self, trainer, pl_module, stage):
         if trainer.global_rank == 0:
-            extra_headers = self.get_extra_headers(trainer, pl_module)
+            if self._skip_tuner_callbacks(trainer):
+                return
+            extra_headers = self._get_extra_headers(trainer, pl_module)
             self.ntfy.send_notification(
                 f"🤖 {stage.split()[-1]} started. Respond with {self.run_name} to stop run.",
                 extra_headers=extra_headers,
@@ -38,24 +38,20 @@ class NtfyCallback(Callback):
 
     def teardown(self, trainer, pl_module, stage):
         if trainer.global_rank == 0:
-            extra_headers = self.get_extra_headers(trainer, pl_module)
-            self.ntfy.send_notification(
-                f"🏆️ {stage} finished", extra_headers=extra_headers
-            )
+            if self._skip_tuner_callbacks(trainer):
+                return
+            extra_headers = self._get_extra_headers(trainer, pl_module)
+            self.ntfy.send_notification(f"🏆️ {stage} finished", extra_headers=extra_headers)
 
     def on_exception(self, trainer, pl_module, exception):
         if trainer.global_rank == 0:
-            extra_headers = self.get_extra_headers(trainer, pl_module)
-            e = (
-                "Keyboard interrupt"
-                if isinstance(exception, KeyboardInterrupt)
-                else str(exception)
-            )
-            self.ntfy.send_notification(
-                f"💢 Exception: {e}", extra_headers=extra_headers
-            )
+            if self._skip_tuner_callbacks(trainer):
+                return
+            extra_headers = self._get_extra_headers(trainer, pl_module)
+            e = "Keyboard interrupt" if isinstance(exception, KeyboardInterrupt) else str(exception)
+            self.ntfy.send_notification(f"💢 Exception: {e}", extra_headers=extra_headers)
 
-    def get_extra_headers(self, trainer, pl_module):
+    def _get_extra_headers(self, trainer, pl_module):
         extra_headers = {"Title": f"Train SAEs"}
         self.run_name = "STOP"
         for logger in trainer.loggers:
@@ -65,3 +61,9 @@ class NtfyCallback(Callback):
                 extra_headers["Click"] = url
                 return extra_headers
         return extra_headers
+
+    def _skip_tuner_callbacks(self, trainer):
+        for cb in trainer.callbacks:
+            if isinstance(cb, callbacks.BatchSizeFinder) or isinstance(cb, callbacks.LearningRateFinder):
+                return True  # skip callbacks used by Tuner
+        return False
