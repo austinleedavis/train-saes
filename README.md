@@ -9,3 +9,4 @@ NTFY_TOPIC=<your_topic_here> # the topic to which you will publish/subscribe not
   - `WANDB_API_KEY`: If WandB logger is used, this is the key or login via the WandB CLI
   - `NTFY_TOPIC`: The topic to which you will publish/subscribe notifications
   - `DATA_ROOT`: Root directory for local copy of hidden state vector dataset
+  - `HYDRA_CONFIG_PATH`: Directory containing your Hydra config
