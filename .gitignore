@@ -3,6 +3,7 @@ wandb/
 models/
 data/
 slurm/
+outputs/
 .env
 
 
