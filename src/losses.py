@@ -32,7 +32,7 @@ class L1WeightedLoss(SaeLoss):
             model_activations_BD,
         )
 
-        l1_loss = self.l1_coefficient * encoded_representations_BF.sum()
+        l1_loss = self.l1_coefficient * encoded_representations_BF.abs().sum()
         loss = l2_loss + l1_loss
         return loss
 
