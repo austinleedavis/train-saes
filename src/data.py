@@ -4,46 +4,45 @@ from typing import Callable
 
 import datasets
 import torch
-from datasets import Dataset, IterableDataset
+from datasets import Dataset, DatasetDict
 from lightning.pytorch import LightningDataModule
 from torch.utils.data import DataLoader
 
 
 class SingleLayerHiddenStateCollator:
 
-    def __init__(self, layer: int, **kwargs):
+    def __init__(self, layer: int, target_column_name: str = "data", **kwargs):
         super().__init__(**kwargs)
-        self.layer = layer
+        self.target_column_name = target_column_name
 
     def __call__(self, batch_BLPD: list[dict[str, torch.Tensor]]):
         """
-        batch_BLPD comes in as a list of dict-records
-        HiddenState dimension is [Batch, Layer, Position, Dimension]"""
-        return batch_BLPD[0]["HiddenStates"][self.layer]
+        batch_BLPD comes in as a list of dict-records"""
+        return torch.stack([b[self.target_column_name] for b in batch_BLPD])
 
 
 class SaeDataModule(LightningDataModule):
 
-    data_root: str
+    layer: int
     collator: Callable
     batch_size: int
     num_workers: int
     num_proc: int
-    hf_dataset: IterableDataset = None
+    hf_dataset: Dataset = None
     train_split: Dataset = None
     val_split: Dataset = None
     test_split: Dataset = None
 
     def __init__(
         self,
-        data_root: str,
+        layer: int,
         collator: Callable,
         batch_size: int,
         num_workers: int,
         num_proc: int,
     ):
         super().__init__()
-        self.data_root = data_root
+        self.layer = layer
         self.collator = collator
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -54,31 +53,48 @@ class SaeDataModule(LightningDataModule):
 
     def setup(self, stage: str = None):
         if not self.hf_dataset:
-            for k in ["train", "test", "val"]:
-                files = glob(os.path.join(self.data_root, k, "activations_*.parquet*"))
-                print({k: f"count:{len(files)} first:{files[0]}"})
+            phases = [0, 1, 2]
+            configs = [f"layer-{self.layer:02d}-phase-{p}" for p in phases]
 
-            self.hf_dataset = datasets.load_dataset(
-                "parquet",
-                data_files={
-                    k: os.path.join(self.data_root, k, "activations_*.parquet*")
-                    for k in ["train", "val", "test"]
-                },
-                num_proc=self.num_proc,
-                # streaming=True,
-            ).with_format("torch")
+            ds: Dataset = (
+                datasets.concatenate_datasets(
+                    [
+                        datasets.load_dataset(
+                            path="austindavis/chessgpt2-hiddenstates",
+                            name=config,
+                            split="train",
+                            num_proc=self.num_proc,
+                        )
+                        for config in configs
+                    ]
+                )
+                .select_columns("data")
+                .with_format("torch")
+            )
 
-    def get_loader(self, stage: str):
+            split = ds.train_test_split(test_size=0.1, seed=42)
+            val_test = split["test"].train_test_split(test_size=0.5, seed=42)
+
+            self.hf_dataset = DatasetDict(
+                {
+                    "train": split["train"],
+                    "val": val_test["train"],
+                    "test": val_test["test"],
+                }
+            )
+
+    def get_loader(self, stage: str, shuffle=False):
         loader = DataLoader(
             self.hf_dataset[stage],
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             collate_fn=self.collator,
+            shuffle=shuffle,
         )
         return loader
 
     def train_dataloader(self):
-        return self.get_loader("train")
+        return self.get_loader("train", shuffle=True)
 
     def val_dataloader(self):
         return self.get_loader("val")

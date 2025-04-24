@@ -7,7 +7,7 @@ import lightning as L
 import torch
 import torch.nn as nn
 
-from src.losses import L1WeightedLoss, SaeLoss
+from src.losses import L1WeightedLoss, MSELoss, SaeLoss
 
 
 class ConstrainedAdam(torch.optim.Adam):
@@ -61,9 +61,11 @@ class SparseAutoEncoder(L.LightningModule):
     """Linear decode from feature dictionary (F) to d_model (D)"""
     activation_fn: nn.Module
     """Nonlinear activation applied after both encoding and decoding."""
-    loss_fn: nn.Module
-    """oss function used during training (e.g. L1-weighted reconstruction loss)."""
-    lr: float = 0.001
+    train_loss_fn: nn.Module
+    """loss function used during training (e.g. L1-weighted reconstruction loss)."""
+    val_loss_fn: nn.Module
+    """loss function used during validation (e.g., MSELoss)"""
+    lr: float
     """Learning rate used for optimization."""
 
     def __init__(
@@ -71,19 +73,23 @@ class SparseAutoEncoder(L.LightningModule):
         activation_dim: int,
         dict_size: int,
         activation_fn: nn.Module = nn.ReLU(),
-        loss_fn: SaeLoss = L1WeightedLoss(4),
+        train_loss_fn: SaeLoss = L1WeightedLoss(4),
+        val_loss_fn: SaeLoss = MSELoss(),
         automatic_optimization: bool = True,
+        initial_learning_rate: float = 1e-3,
     ):
         super().__init__()
 
         self.activation_dim = activation_dim
         self.dict_size = dict_size
         self.automatic_optimization = automatic_optimization
+        self.lr = initial_learning_rate
+        self.val_loss_fn = val_loss_fn
 
         self.encoder_DF = nn.Linear(activation_dim, dict_size, bias=True)
         self.decoder_FD = nn.Linear(dict_size, activation_dim, bias=True)
         self.activation_fn = activation_fn
-        self.loss_fn = loss_fn
+        self.train_loss_fn = train_loss_fn
         self.save_hyperparameters(ignore=["activation_fn", "loss_fn"])
 
     def encode(self, model_activations_D: torch.Tensor) -> torch.Tensor:
@@ -106,9 +112,7 @@ class SparseAutoEncoder(L.LightningModule):
         :rtype: Tensor"""
         return self.activation_fn(self.decoder_FD(encoded_representation_F))
 
-    def forward(
-        self, model_activations_D: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, model_activations_D: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         :param model_activations_D: Activations tensor with shape [..., d_model]
         :type model_activations_D: Tensor
@@ -120,16 +124,28 @@ class SparseAutoEncoder(L.LightningModule):
         return reconstructed_model_activations_D, encoded_representation_F
 
     def configure_optimizers(self):
-        optimizer = ConstrainedAdam(
-            self.parameters(), self.decoder_FD.parameters(), lr=self.lr
+        optimizer = ConstrainedAdam(self.parameters(), self.decoder_FD.parameters(), lr=self.lr)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=self.trainer.max_epochs,
+            eta_min=0,
         )
-        return {"optimizer": optimizer}
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "epoch",
+                "frequency": 1,
+            },
+        }
 
-    def step(self, model_activations_BD: torch.Tensor):
-        reconstructed_model_activations_BD, encoded_representation_BF = self.forward(
-            model_activations_BD
-        )
-        loss = self.loss_fn(
+    def on_train_epoch_end(self):
+        lr = self.trainer.lr_scheduler_configs[0].scheduler.get_last_lr()[0]
+        self.log("lr", lr, prog_bar=True, logger=True)
+
+    def step(self, model_activations_BD: torch.Tensor, loss_fn: SaeLoss):
+        reconstructed_model_activations_BD, encoded_representation_BF = self.forward(model_activations_BD)
+        loss = loss_fn(
             model_activations_BD,
             reconstructed_model_activations_BD,
             encoded_representation_BF,
@@ -137,16 +153,16 @@ class SparseAutoEncoder(L.LightningModule):
         return loss
 
     def training_step(self, model_activations_BD: torch.Tensor):
-        loss = self.step(model_activations_BD)
+        loss = self.step(model_activations_BD, self.train_loss_fn)
         self.log("train/loss", loss)
         return {"loss": loss}
 
     def validation_step(self, model_activations_BD: torch.Tensor):
-        loss = self.step(model_activations_BD)
+        loss = self.step(model_activations_BD, self.val_loss_fn)
         self.log("validation/loss", loss)
         return {"loss": loss}
 
     def test_step(self, model_activations_BD: torch.Tensor):
-        loss = self.step(model_activations_BD)
+        loss = self.step(model_activations_BD, self.val_loss_fn)
         self.log("test/loss", loss)
         return {"loss": loss}
