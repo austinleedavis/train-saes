@@ -88,7 +88,7 @@ def main():
                 dirpath="models",
                 monitor="validation/loss",  # metric to monitor
                 mode="min",  # minimize val_acc
-                save_top_k=2,  # keep only top 2 checkpoints
+                save_top_k=1,  # keep only top 2 checkpoints
                 save_last=True,  # also save the last checkpoint
                 every_n_epochs=1,
                 filename="epoch-{epoch}-step-{step}-{val_loss:.4f}",  # custom filename
