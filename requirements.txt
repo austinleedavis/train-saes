@@ -25,6 +25,7 @@ torch_tb_profiler
 # --------- others --------- #
 tqdm # Fast, Extensible Progress Meter
 chess # A chess library with move generation and validation, etc.
+dotenv
 
 # --------- visualization --------- #
 seaborn
