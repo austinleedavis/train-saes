@@ -5,6 +5,8 @@ data/
 slurm/
 outputs/
 .env
+TrainSae/
+configs-*/
 
 
 # Byte-compiled / optimized / DLL files
