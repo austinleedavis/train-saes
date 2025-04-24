@@ -90,7 +90,7 @@ class SparseAutoEncoder(L.LightningModule):
         self.decoder_FD = nn.Linear(dict_size, activation_dim, bias=True)
         self.activation_fn = activation_fn
         self.train_loss_fn = train_loss_fn
-        self.save_hyperparameters(ignore=["activation_fn", "loss_fn"])
+        self.save_hyperparameters(ignore=["activation_fn", "val_loss_fn", "train_loss_fn"])
 
     def encode(self, model_activations_D: torch.Tensor) -> torch.Tensor:
         """
