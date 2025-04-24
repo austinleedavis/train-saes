@@ -85,7 +85,7 @@ def main():
     if args.checkpoint:
         callbacks.append(
             ModelCheckpoint(
-                dirpath="models",
+                dirpath=f"models/layer{args.layer:02d}",
                 monitor="validation/loss",  # metric to monitor
                 mode="min",  # minimize val_acc
                 save_top_k=1,  # keep only top 2 checkpoints
