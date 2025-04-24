@@ -20,7 +20,7 @@ cd ~/git/train-sae
 set -a
 source .env
 set +a
-wandb agent "$SWEEP_LINK"
+wandb agent \"\$SWEEP_LINK\"
 exit
 zzzRunHEREinTheContainer
 
