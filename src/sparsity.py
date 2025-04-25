@@ -25,6 +25,9 @@ class TopKFilter(nn.Module):
         )
         return input * mask
 
+    def extra_repr(self):
+        return f"k={self.k}"
+
 
 class BatchTopKFilter(nn.Module):
     """
@@ -44,13 +47,20 @@ class BatchTopKFilter(nn.Module):
 
     def forward(self, input_BX: torch.Tensor, dim=-1):
         batch_size = input_BX.shape[0]
-        flat_input = input_BX.flatten(end_dim=1)
+        flat_input = input_BX.flatten()
         _, indices = flat_input.topk(self.k * batch_size, dim=dim)
 
-        mask = torch.zeros_like(flat_input, dtype=torch.bool).scatter(
-            dim=dim,
-            index=indices,
-            value=True,
+        mask = (
+            torch.zeros_like(flat_input, dtype=torch.bool)
+            .scatter(
+                dim=dim,
+                index=indices,
+                value=True,
+            )
+            .reshape_as(input_BX)
         )
 
-        return input_BX * mask.view_as(input_BX)
+        return input_BX * mask
+
+    def extra_repr(self):
+        return f"k={self.k}"

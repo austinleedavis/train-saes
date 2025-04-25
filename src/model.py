@@ -3,11 +3,14 @@ Implementation of SAE inspired by https://adamkarvonen.github.io/machine_learnin
 
 """
 
+from typing import Literal
+
 import lightning as L
 import torch
 import torch.nn as nn
 
 from src.losses import L1WeightedLoss, MSELoss, SaeLoss
+from src.sparsity import BatchTopKFilter, TopKFilter
 
 
 class ConstrainedAdam(torch.optim.Adam):
@@ -59,8 +62,6 @@ class SparseAutoEncoder(L.LightningModule):
     """Linear encoder from d_model (D) to feature dictionary (F)"""
     decoder_FD: nn.Linear
     """Linear decode from feature dictionary (F) to d_model (D)"""
-    activation_fn: nn.Module
-    """Nonlinear activation applied after both encoding and decoding."""
     train_loss_fn: nn.Module
     """loss function used during training (e.g. L1-weighted reconstruction loss)."""
     val_loss_fn: nn.Module
@@ -71,26 +72,54 @@ class SparseAutoEncoder(L.LightningModule):
     def __init__(
         self,
         activation_dim: int,
-        dict_size: int,
-        activation_fn: nn.Module = nn.ReLU(),
-        train_loss_fn: SaeLoss = L1WeightedLoss(4),
-        val_loss_fn: SaeLoss = MSELoss(),
+        dict_size: int = None,
+        dict_scale: int = None,
+        pre_activation: Literal["relu", "none"] = "relu",
+        sparsity_scheme: Literal["topk", "batch_topk"] = "batch_topk",
+        sparsity_parameter: int = 32,
+        train_loss_fn_str: Literal["mse", "weightedL1"] = "mse",
+        val_loss_fn_str: Literal["mse", "weightedL1"] = "mse",
         automatic_optimization: bool = True,
         initial_learning_rate: float = 1e-3,
     ):
         super().__init__()
+        self.save_hyperparameters()
+
+        if dict_size is not None:
+            self.dict_size = dict_size
+        elif dict_scale is not None:
+            self.dict_size = dict_scale * activation_dim
+        else:
+            raise ValueError("Must provide either dict_size or dict_scale. Both were None.")
 
         self.activation_dim = activation_dim
-        self.dict_size = dict_size
         self.automatic_optimization = automatic_optimization
         self.lr = initial_learning_rate
-        self.val_loss_fn = val_loss_fn
 
-        self.encoder_DF = nn.Linear(activation_dim, dict_size, bias=True)
+        SUPPORTED_PREACTIVATIONS = {
+            "relu": nn.ReLU(),
+            "none": nn.Identity(),
+        }
+        pre_activation = SUPPORTED_PREACTIVATIONS[pre_activation]
+
+        SUPPORTED_SPARISTY_ACTIVATIONS = {
+            "topk": TopKFilter(sparsity_parameter),
+            "batch_topk": BatchTopKFilter(sparsity_parameter),
+            "none": nn.Identity(),
+        }
+        sparsity_fn = SUPPORTED_SPARISTY_ACTIVATIONS[sparsity_scheme]
+
+        self.encoder_DF = nn.Sequential(
+            pre_activation,
+            nn.Linear(activation_dim, dict_size, bias=True),
+            sparsity_fn,
+        )
+
         self.decoder_FD = nn.Linear(dict_size, activation_dim, bias=True)
-        self.activation_fn = activation_fn
-        self.train_loss_fn = train_loss_fn
-        self.save_hyperparameters(ignore=["activation_fn", "val_loss_fn", "train_loss_fn"])
+
+        supported_losses = {"mse": MSELoss(), "weightedL1": L1WeightedLoss(sparsity_parameter)}
+        self.train_loss_fn = supported_losses[train_loss_fn_str]
+        self.val_loss_fn = supported_losses[val_loss_fn_str]
 
     def encode(self, model_activations_D: torch.Tensor) -> torch.Tensor:
         """
@@ -100,7 +129,7 @@ class SparseAutoEncoder(L.LightningModule):
         :type model_activations_D: Tensor
         :return: Encoded sparse representation of shape [..., F].
         :rtype: Tensor"""
-        return self.activation_fn(self.encoder_DF(model_activations_D))
+        return self.encoder_DF(model_activations_D)
 
     def decode(self, encoded_representation_F: torch.Tensor) -> torch.Tensor:
         """
@@ -110,7 +139,7 @@ class SparseAutoEncoder(L.LightningModule):
         :type encoded_representation_F: Tensor
         :return: Reconstructed activations of shape [..., D].
         :rtype: Tensor"""
-        return self.activation_fn(self.decoder_FD(encoded_representation_F))
+        return self.decoder_FD(encoded_representation_F)
 
     def forward(self, model_activations_D: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
