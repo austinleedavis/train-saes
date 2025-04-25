@@ -57,9 +57,9 @@ class BatchTopKFilter(nn.Module):
         self.k = k
 
     def forward(self, input_BX: torch.Tensor, dim=-1):
-        batch_size = input_BX.shape[0]
+        B = 1 if (input_BX.dim() == 1) else input_BX.shape[0]
         flat_input = input_BX.flatten()
-        _, indices = flat_input.topk(self.k * batch_size, dim=dim)
+        _, indices = flat_input.topk(self.k * B, dim=dim)
 
         mask = (
             torch.zeros_like(flat_input, dtype=torch.bool)
@@ -199,7 +199,7 @@ class SparseAutoEncoder(nn.Module):
     def from_pretrained(cls, pretrained_model_name_or_path):
         config = SaeConfig.from_pretrained(pretrained_model_name_or_path)
         with torch.device("meta"):
-            model = cls(asdict(config))
+            model = cls(**asdict(config))
 
         # Load the weights from the safetensors file
         safetensors_path = f"{pretrained_model_name_or_path}/model.safetensors"
