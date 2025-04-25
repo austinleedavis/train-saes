@@ -134,20 +134,18 @@ def main():
             if args.ntfy:
                 ntfy = Ntfy(topic=os.environ.get("NTFY_TOPIC", None))
                 ntfy.send_notification(message)
-                if args.wandb:
-                    import wandb
+            if args.wandb:
+                import wandb
 
-                    wandb.log({"lr_find_results": wandb.Image(initial_lr.plot(suggest=True))})
-            else:
-                print(message)
+                wandb.log({"lr_find_results": wandb.Image(initial_lr.plot(suggest=True))})
+            print(message)
         if args.find_batch_size:
             batch_size = tuner.scale_batch_size(model=sae, datamodule=dm, max_trials=10)
             message = f"Training with batch size: {batch_size=}"
             if args.ntfy:
                 ntfy = Ntfy(topic=os.environ.get("NTFY_TOPIC", None))
                 ntfy.send_notification(message)
-            else:
-                print(message)
+            print(message)
 
     ############################
     # Run
