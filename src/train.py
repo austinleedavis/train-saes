@@ -8,7 +8,7 @@ import os
 import dotenv
 import torch
 from lightning.pytorch import Trainer
-from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from lightning.pytorch.tuner import Tuner
 
 from src.callbacks import NtfyCallback, WandbLogger
@@ -42,6 +42,8 @@ def main():
     parser.add_argument("--wandb", action="store_true", help="Enable logging to Weights and Biases")
     parser.add_argument("--ntfy", action="store_true", help="Enable Ntfy notifications callback")
     parser.add_argument("--checkpoint", action="store_true", help="Enable model checkpointing")
+    parser.add_argument("--early_stopping", action="store_true", help="Enable model early stopping")
+    
     parser.add_argument("--fast_dev_run", action="store_true", help="Runs 1 batch if set to True batch(es) of train, val and test to find any bugs (ie: a sort of unit test)")
     parser.add_argument("--find_batch_size", action="store_true", help="Enable Tuner to find batch_size")
     parser.add_argument("--find_lr", action="store_true", help="Enable Tuner to find learning rate (lr)")
@@ -114,6 +116,9 @@ def main():
                 filename=f"layer{args.layer:02d}",
             )
         )
+
+    if args.early_stopping:
+        callbacks.append(EarlyStopping(monitor="validation/loss", mode="min", patience=10, verbose=True))
 
     trainer = Trainer(
         accelerator="auto",
