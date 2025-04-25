@@ -137,9 +137,7 @@ def main():
                 if args.wandb:
                     import wandb
 
-                    # wandb.log("lr_find_results", initial_lr.plot(suggest=True))
-
-                    wandb.log({"lr_find_results": initial_lr.plot(suggest=True)})
+                    wandb.log({"lr_find_results": wandb.Image(initial_lr.plot(suggest=True))})
             else:
                 print(message)
         if args.find_batch_size:
