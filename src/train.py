@@ -13,10 +13,21 @@ from lightning.pytorch.tuner import Tuner
 
 from src.callbacks import NtfyCallback, WandbLogger
 from src.data import SaeDataModule, SingleLayerHiddenStateCollator
-from src.model import SparseAutoEncoder
+from src.model import LightSparseAutoEncoder
 from src.utils.ntfy import Ntfy
 
 torch.set_float32_matmul_precision("medium")
+
+
+class ModelCheckpointPlus(ModelCheckpoint):
+
+    def __init__(self, light_sae: LightSparseAutoEncoder, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.light_sae = light_sae
+
+    def _save_checkpoint(self, trainer: Trainer, filepath: str) -> None:
+        super()._save_checkpoint(trainer=trainer, filepath=filepath)
+        self.light_sae.sae.save_pretrained(os.path.splitext(filepath)[0])
 
 
 def main():
@@ -35,6 +46,7 @@ def main():
     parser.add_argument("--find_batch_size", action="store_true", help="Enable Tuner to find batch_size")
     parser.add_argument("--find_lr", action="store_true", help="Enable Tuner to find learning rate (lr)")
     parser.add_argument("--max_epochs", type=int, default=50, help="Number of training epochs to run.")
+    
     #SAE params
     parser.add_argument("--dict_size", type=int, default=None, help="Explicit size of the dictionary (See --dict_scale).")
     parser.add_argument("--dict_scale", type=int, default=4, help="Multiplier for the hidden state dimension to compute the dictionary size when --dict_size is not provided.")
@@ -66,7 +78,7 @@ def main():
     # Setup Model
     ############################
 
-    sae = SparseAutoEncoder(
+    sae_module = LightSparseAutoEncoder(
         activation_dim=args.activation_dim,
         dict_size=args.dict_size,
         dict_scale=args.dict_scale,
@@ -90,7 +102,8 @@ def main():
 
     if args.checkpoint:
         callbacks.append(
-            ModelCheckpoint(
+            ModelCheckpointPlus(
+                light_sae=sae_module,
                 dirpath="models",
                 monitor="validation/loss",
                 mode="min",
@@ -105,14 +118,12 @@ def main():
     trainer = Trainer(
         accelerator="auto",
         fast_dev_run=args.fast_dev_run,
-        limit_test_batches=0,
-        # limit_val_batches=0,
         max_epochs=args.max_epochs,
         val_check_interval=1.0,  # When using an IterableDataset you must set the val_check_interval to 1.0
         callbacks=callbacks,
         logger=(
             WandbLogger(
-                name=f"SAE-{args.layer:02d}-{sae.dict_size}-{args.sparsity_scheme}-{args.sparsity_parameter}",
+                name=f"SAE-{args.layer:02d}-{sae_module.sae.dict_size}-{args.sparsity_scheme}-{args.sparsity_parameter}",
                 project="TrainSae",
                 log_model=False,
                 checkpoint_name=None,
@@ -129,7 +140,7 @@ def main():
     if args.find_batch_size or args.find_lr:
         tuner = Tuner(trainer)
         if args.find_lr:
-            initial_lr = tuner.lr_find(model=sae, datamodule=dm)
+            initial_lr = tuner.lr_find(model=sae_module, datamodule=dm)
             message = f"Training with initial_lr: {initial_lr.suggestion()=}"
             if args.ntfy:
                 ntfy = Ntfy(topic=os.environ.get("NTFY_TOPIC", None))
@@ -140,7 +151,7 @@ def main():
                 wandb.log({"lr_find_results": wandb.Image(initial_lr.plot(suggest=True))})
             print(message)
         if args.find_batch_size:
-            batch_size = tuner.scale_batch_size(model=sae, datamodule=dm, max_trials=10)
+            batch_size = tuner.scale_batch_size(model=sae_module, datamodule=dm, max_trials=10)
             message = f"Training with batch size: {batch_size=}"
             if args.ntfy:
                 ntfy = Ntfy(topic=os.environ.get("NTFY_TOPIC", None))
@@ -150,7 +161,7 @@ def main():
     ############################
     # Run
     ############################
-    trainer.fit(model=sae, datamodule=dm)
+    trainer.fit(model=sae_module, datamodule=dm)
 
 
 if __name__ == "__main__":
