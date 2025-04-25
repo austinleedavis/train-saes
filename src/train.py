@@ -24,7 +24,7 @@ def main():
     # fmt: off
     parser = argparse.ArgumentParser("Train SAE on a single layer")
     # Training params
-    parser.add_argument("--layer", type=int, default=0, help="The layer on which to train the SAE.")
+    parser.add_argument("--layer", type=int, default=9, help="The layer on which to train the SAE.")
     parser.add_argument("--batch_size", type=int, default=2048, help="Number of hidden state vectors in each training batch.")
     parser.add_argument("--num_workers", type=int, default=15, help="Number of workers used by the torch 🔥 Dataloader.")
     parser.add_argument("--num_proc", type=int, default=3, help="Number of processes used by the Huggingface 🤗 Dataset module.")
@@ -112,7 +112,7 @@ def main():
         callbacks=callbacks,
         logger=(
             WandbLogger(
-                name=f"SAE-{args.layer:02d}-{dict_size}-{args.activation}-{args.k}",
+                name=f"SAE-{args.layer:02d}-{sae.dict_size}-{args.sparsity_scheme}-{args.sparsity_parameter}",
                 project="TrainSae",
                 log_model=False,
                 checkpoint_name=None,
@@ -130,14 +130,26 @@ def main():
         tuner = Tuner(trainer)
         if args.find_lr:
             initial_lr = tuner.lr_find(model=sae, datamodule=dm)
+            message = f"Training with initial_lr: {initial_lr.suggestion()=}"
             if args.ntfy:
                 ntfy = Ntfy(topic=os.environ.get("NTFY_TOPIC", None))
-                ntfy.send_notification(f"Training with initial_lr: {initial_lr.suggestion()=}")
+                ntfy.send_notification(message)
+                if args.wandb:
+                    import wandb
+
+                    # wandb.log("lr_find_results", initial_lr.plot(suggest=True))
+
+                    wandb.log({"lr_find_results": initial_lr.plot(suggest=True)})
+            else:
+                print(message)
         if args.find_batch_size:
             batch_size = tuner.scale_batch_size(model=sae, datamodule=dm, max_trials=10)
+            message = f"Training with batch size: {batch_size=}"
             if args.ntfy:
                 ntfy = Ntfy(topic=os.environ.get("NTFY_TOPIC", None))
-                ntfy.send_notification(f"Training with batch size: {batch_size=}")
+                ntfy.send_notification(message)
+            else:
+                print(message)
 
     ############################
     # Run

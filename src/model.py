@@ -111,11 +111,11 @@ class SparseAutoEncoder(L.LightningModule):
 
         self.encoder_DF = nn.Sequential(
             pre_activation,
-            nn.Linear(activation_dim, dict_size, bias=True),
+            nn.Linear(self.activation_dim, self.dict_size, bias=True),
             sparsity_fn,
         )
 
-        self.decoder_FD = nn.Linear(dict_size, activation_dim, bias=True)
+        self.decoder_FD = nn.Linear(self.dict_size, self.activation_dim, bias=True)
 
         supported_losses = {"mse": MSELoss(), "weightedL1": L1WeightedLoss(sparsity_parameter)}
         self.train_loss_fn = supported_losses[train_loss_fn_str]
