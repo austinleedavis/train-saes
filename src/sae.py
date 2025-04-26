@@ -6,7 +6,6 @@ import os
 from dataclasses import asdict, dataclass
 from typing import Literal
 
-import lightning as L
 import torch
 import torch.nn as nn
 import yaml
@@ -45,11 +44,14 @@ class BatchTopKFilter(nn.Module):
     Applies a batched top-k filter to the input tensor by retaining only the top-k activations
     across the entire batch and zeroing out the rest.
 
-    This method implements the BatchTopK activation sparsity strategy described in
+    This class implements the BatchTopK activation sparsity strategy described in
     "BatchTopK: A Simple Improvement for TopK SAEs" by Nora Belrose. Unlike standard per-example
     top-k sparsity, which keeps the top-k values for each example independently, BatchTopK selects
     the top-k * B highest activations across the entire batch (where B is the batch size),
     promoting more efficient and global competition among features.
+
+    NOTE: This class should only be used during training. During inference a lowpass filter should be
+    used.
     """
 
     def __init__(self, k: int):
@@ -75,6 +77,21 @@ class BatchTopKFilter(nn.Module):
 
     def extra_repr(self):
         return f"k={self.k}"
+
+
+class ThresholdFilter(nn.Module):
+
+    threshold: float
+
+    def __init__(self, threshold: int):
+        super().__init__()
+        self.threshold = threshold
+
+    def forward(self, input_BX: torch.Tensor, dim=-1):
+        return torch.where(input_BX > self.threshold, input_BX, torch.zeros_like(input_BX))
+
+    def extra_repr(self):
+        return f"threshold={self.threshold}"
 
 
 @dataclass
@@ -111,7 +128,7 @@ class SparseAutoEncoder(nn.Module):
     """(D) Size of the input activation vectors"""
     dict_size: int
     """(F) Size of the SAE's feature dictionary, i.e. the expanded latent space"""
-    encoder_DF: nn.Linear
+    encoder_DF: nn.Sequential
     """Linear encoder from d_model (D) to feature dictionary (F)"""
     decoder_FD: nn.Linear
     """Linear decode from feature dictionary (F) to d_model (D)"""
@@ -122,7 +139,7 @@ class SparseAutoEncoder(nn.Module):
         dict_scale: int = None,
         dict_size: int = None,
         pre_activation: Literal["relu", "none"] = "relu",
-        sparsity_scheme: Literal["topk", "batch_topk"] = "batch_topk",
+        sparsity_scheme: Literal["topk", "batch_topk", "threshold"] = "batch_topk",
         sparsity_parameter: int | float = 32,
     ):
         super().__init__()
@@ -144,6 +161,7 @@ class SparseAutoEncoder(nn.Module):
         SUPPORTED_SPARISTY_ACTIVATIONS = {
             "topk": TopKFilter(sparsity_parameter),
             "batch_topk": BatchTopKFilter(sparsity_parameter),
+            "threshold": ThresholdFilter(sparsity_parameter),
             "none": nn.Identity(),
         }
         sparsity_fn = SUPPORTED_SPARISTY_ACTIVATIONS[sparsity_scheme]
