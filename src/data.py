@@ -36,6 +36,7 @@ class SaeDataModule(LightningDataModule):
     def __init__(
         self,
         layer: int,
+        phases: list[int],
         collator: Callable,
         batch_size: int,
         num_workers: int,
@@ -43,6 +44,7 @@ class SaeDataModule(LightningDataModule):
     ):
         super().__init__()
         self.layer = layer
+        self.phases = phases
         self.collator = collator
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -53,8 +55,7 @@ class SaeDataModule(LightningDataModule):
 
     def setup(self, stage: str = None):
         if not self.hf_dataset:
-            phases = [0, 1, 2]
-            configs = [f"layer-{self.layer:02d}-phase-{p}" for p in phases]
+            configs = [f"layer-{self.layer:02d}-phase-{p}" for p in self.phases]
 
             ds: Dataset = (
                 datasets.concatenate_datasets(

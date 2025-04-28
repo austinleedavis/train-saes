@@ -35,6 +35,7 @@ def main():
     # fmt: off
     parser = argparse.ArgumentParser("Train SAE on a single layer")
     # Training params
+    parser.add_argument("--phases",type=int,nargs="+",help="List of integer phases")
     parser.add_argument("--layer", type=int, default=9, help="The layer on which to train the SAE.")
     parser.add_argument("--batch_size", type=int, default=2048, help="Number of hidden state vectors in each training batch.")
     parser.add_argument("--num_workers", type=int, default=15, help="Number of workers used by the torch 🔥 Dataloader.")
@@ -70,6 +71,7 @@ def main():
 
     dm = SaeDataModule(
         layer=args.layer,
+        phases=args.phases,
         collator=SingleLayerHiddenStateCollator(layer=args.layer),
         batch_size=args.batch_size,
         num_workers=args.num_workers,
