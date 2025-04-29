@@ -44,12 +44,14 @@ def main():
     parser.add_argument("--ntfy", action="store_true", help="Enable Ntfy notifications callback")
     parser.add_argument("--checkpoint", action="store_true", help="Enable model checkpointing")
     parser.add_argument("--early_stopping", action="store_true", help="Enable model early stopping")
+    parser.add_argument("--patience", type=int, default=50, help="Early stopping patience")
     
     parser.add_argument("--fast_dev_run", action="store_true", help="Runs 1 batch if set to True batch(es) of train, val and test to find any bugs (ie: a sort of unit test)")
     parser.add_argument("--find_batch_size", action="store_true", help="Enable Tuner to find batch_size")
     parser.add_argument("--find_lr", action="store_true", help="Enable Tuner to find learning rate (lr)")
     parser.add_argument("--max_epochs", type=int, default=50, help="Number of training epochs to run.")
-    
+    parser.add_argument("--dirpath", type=str, default="models", help="Output path of models.")
+
     #SAE params
     parser.add_argument("--dict_size", type=int, default=None, help="Explicit size of the dictionary (See --dict_scale).")
     parser.add_argument("--dict_scale", type=int, default=4, help="Multiplier for the hidden state dimension to compute the dictionary size when --dict_size is not provided.")
@@ -108,7 +110,7 @@ def main():
         callbacks.append(
             ModelCheckpointPlus(
                 light_sae=sae_module,
-                dirpath="models",
+                dirpath=args.dirpath,
                 monitor="validation/loss",
                 mode="min",
                 save_top_k=1,
@@ -120,7 +122,9 @@ def main():
         )
 
     if args.early_stopping:
-        callbacks.append(EarlyStopping(monitor="validation/loss", mode="min", patience=10, verbose=True))
+        callbacks.append(
+            EarlyStopping(monitor="validation/loss", mode="min", patience=args.patience, verbose=True)
+        )
 
     trainer = Trainer(
         accelerator="auto",
