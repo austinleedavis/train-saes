@@ -168,6 +168,11 @@ def main():
     ############################
     # Run
     ############################
+    if args.wandb:
+        import wandb
+
+        wandb.run.config.update(vars(args))
+
     trainer.fit(model=sae_module, datamodule=dm)
 
 
