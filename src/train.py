@@ -12,7 +12,7 @@ from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from lightning.pytorch.tuner import Tuner
 
 from src.callbacks import NtfyCallback, WandbLogger
-from src.data import SaeDataModule, SingleLayerHiddenStateCollator
+from src.data import SaeDataModule, SingleHiddenStateCollator
 from src.model import LightSparseAutoEncoder
 from src.utils.ntfy import Ntfy
 
@@ -33,9 +33,9 @@ class ModelCheckpointPlus(ModelCheckpoint):
 def main():
     dotenv.load_dotenv()
     # fmt: off
-    parser = argparse.ArgumentParser("Train SAE on a single layer")
+    parser = argparse.ArgumentParser("Train SAE on a single layer of hidden state data")
     # Training params
-    parser.add_argument("--phases",type=int,nargs="+",help="List of integer phases")
+    parser.add_argument("--phases",type=int,nargs="+",default=[0], help="List of integer phases")
     parser.add_argument("--layer", type=int, default=9, help="The layer on which to train the SAE.")
     parser.add_argument("--batch_size", type=int, default=2048, help="Number of hidden state vectors in each training batch.")
     parser.add_argument("--num_workers", type=int, default=15, help="Number of workers used by the torch 🔥 Dataloader.")
@@ -51,6 +51,7 @@ def main():
     parser.add_argument("--find_lr", action="store_true", help="Enable Tuner to find learning rate (lr)")
     parser.add_argument("--max_epochs", type=int, default=50, help="Number of training epochs to run.")
     parser.add_argument("--dirpath", type=str, default="models", help="Output path of models.")
+    parser.add_argument("--dataset_path", type=str, default="austindavis/chessgpt2-hiddenstates", help="Hidden State Dataset on which to train the model")
 
     #SAE params
     parser.add_argument("--dict_size", type=int, default=None, help="Explicit size of the dictionary (See --dict_scale).")
@@ -74,10 +75,11 @@ def main():
     dm = SaeDataModule(
         layer=args.layer,
         phases=args.phases,
-        collator=SingleLayerHiddenStateCollator(layer=args.layer),
+        collator=SingleHiddenStateCollator(),
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         num_proc=args.num_proc,
+        dataset_path=args.dataset_path,
     )
 
     ############################
@@ -172,10 +174,7 @@ def main():
     ############################
     # Run
     ############################
-    if args.wandb:
-        import wandb
-
-        wandb.run.config.update(vars(args))
+    trainer.logger.log_hyperparams(vars(args))
 
     trainer.fit(model=sae_module, datamodule=dm)
 

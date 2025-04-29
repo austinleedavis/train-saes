@@ -1,5 +1,3 @@
-import os
-from glob import glob
 from typing import Callable
 
 import datasets
@@ -9,9 +7,10 @@ from lightning.pytorch import LightningDataModule
 from torch.utils.data import DataLoader
 
 
-class SingleLayerHiddenStateCollator:
+class SingleHiddenStateCollator:
+    """Collates a batch of tensors each with shape d_model"""
 
-    def __init__(self, layer: int, target_column_name: str = "data", **kwargs):
+    def __init__(self, target_column_name: str = "data", **kwargs):
         super().__init__(**kwargs)
         self.target_column_name = target_column_name
 
@@ -41,6 +40,7 @@ class SaeDataModule(LightningDataModule):
         batch_size: int,
         num_workers: int,
         num_proc: int,
+        dataset_path: str,
     ):
         super().__init__()
         self.layer = layer
@@ -49,6 +49,7 @@ class SaeDataModule(LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.num_proc = num_proc
+        self.dataset_path = dataset_path
 
     def prepare_data(self) -> Dataset:
         pass
@@ -61,7 +62,7 @@ class SaeDataModule(LightningDataModule):
                 datasets.concatenate_datasets(
                     [
                         datasets.load_dataset(
-                            path="austindavis/chessgpt2-hiddenstates",
+                            path="austindavis/chess-gpt2-hiddenstates-768",
                             name=config,
                             split="train",
                             num_proc=self.num_proc,

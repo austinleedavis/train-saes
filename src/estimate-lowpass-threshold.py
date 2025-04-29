@@ -13,7 +13,7 @@ from lightning.pytorch.tuner import Tuner
 from tqdm.auto import tqdm
 
 from src.callbacks import NtfyCallback, WandbLogger
-from src.data import SaeDataModule, SingleLayerHiddenStateCollator
+from src.data import SaeDataModule, SingleHiddenStateCollator
 from src.model import LightSparseAutoEncoder
 from src.sae import SparseAutoEncoder, ThresholdFilter
 from src.utils.ntfy import Ntfy
@@ -51,7 +51,7 @@ def main():
 
     dm = SaeDataModule(
         layer=args.layer,
-        collator=SingleLayerHiddenStateCollator(layer=args.layer),
+        collator=SingleHiddenStateCollator(),
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         num_proc=args.num_proc,
